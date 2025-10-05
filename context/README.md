@@ -21,6 +21,7 @@ Experimental ideas and designs not yet crystallized into concepts. These represe
 
 **Architecture & Infrastructure:**
 - **[architecture-api.md](explorations/architecture-api.md)** - **[DECISION]** FeathersJS + Drizzle full-stack architecture
+- **[architecture-decision-review.md](explorations/architecture-decision-review.md)** - **[SANITY CHECK]** Validation of architectural choices before building
 - **[state-management.md](explorations/state-management.md)** - Persistence layer (Drizzle ORM + LibSQL/PostgreSQL)
 - **[state-broadcasting.md](explorations/state-broadcasting.md)** - Real-time sync & multi-client (FeathersJS WebSocket)
 - **[cli.md](explorations/cli.md)** - CLI design (oclif, entity commands, stateful context)
