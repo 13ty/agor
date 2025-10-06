@@ -312,6 +312,7 @@ export function resolveShortId<T extends { id: UUID }>(prefix: IDPrefix, entitie
  * @returns Description string
  * @internal
  */
+// biome-ignore lint/suspicious/noExplicitAny: Accepts any entity type with description field
 function getEntityDescription(entity: any): string {
   // Try common description fields
   if (entity.description) return entity.description;

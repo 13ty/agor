@@ -15,6 +15,7 @@ export interface Query {
   $skip?: number;
   $sort?: Record<string, 1 | -1>;
   $select?: string[];
+  // biome-ignore lint/suspicious/noExplicitAny: Query values can be any type
   [key: string]: any;
 }
 
@@ -63,6 +64,7 @@ export interface Repository<T> {
  *
  * Implements FeathersJS service methods using a Drizzle repository.
  */
+// biome-ignore lint/suspicious/noExplicitAny: Generic service adapter needs default any type
 export class DrizzleService<T = any, D = Partial<T>, P extends Params = Params> {
   id: string;
   paginate?: PaginationOptions;
@@ -94,6 +96,7 @@ export class DrizzleService<T = any, D = Partial<T>, P extends Params = Params> 
     for (const [key, value] of Object.entries(query)) {
       if (key.startsWith('$')) continue; // Skip operators
 
+      // biome-ignore lint/suspicious/noExplicitAny: Generic filtering requires dynamic property access
       filtered = filtered.filter((item: any) => {
         // Simple equality check
         if (typeof value === 'object' && value !== null) {
@@ -133,6 +136,7 @@ export class DrizzleService<T = any, D = Partial<T>, P extends Params = Params> 
     const sorted = [...data];
     const entries = Object.entries(sortSpec);
 
+    // biome-ignore lint/suspicious/noExplicitAny: Generic sorting requires dynamic property access
     sorted.sort((a: any, b: any) => {
       for (const [field, direction] of entries) {
         const aVal = a[field];
@@ -153,7 +157,9 @@ export class DrizzleService<T = any, D = Partial<T>, P extends Params = Params> 
   private selectFields(data: T[], fields?: string[]): Partial<T>[] {
     if (!fields || fields.length === 0) return data;
 
+    // biome-ignore lint/suspicious/noExplicitAny: Field selection requires dynamic property access
     return data.map((item: any) => {
+      // biome-ignore lint/suspicious/noExplicitAny: Result object has dynamic fields
       const selected: any = {};
       for (const field of fields) {
         if (field in item) {
@@ -269,6 +275,7 @@ export class DrizzleService<T = any, D = Partial<T>, P extends Params = Params> 
       let records = await this.repository.findAll();
       records = this.filterData(records, query);
 
+      // biome-ignore lint/suspicious/noExplicitAny: Need to access ID field dynamically
       return Promise.all(
         records.map(record => this.repository.update((record as any)[this.id], data as Partial<T>))
       );
@@ -298,6 +305,7 @@ export class DrizzleService<T = any, D = Partial<T>, P extends Params = Params> 
       let records = await this.repository.findAll();
       records = this.filterData(records, query);
 
+      // biome-ignore lint/suspicious/noExplicitAny: Need to access ID field dynamically
       await Promise.all(records.map(record => this.repository.delete((record as any)[this.id])));
 
       return records;

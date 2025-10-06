@@ -23,6 +23,7 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+// biome-ignore lint/suspicious/noExplicitAny: Storybook args type is dynamic
 const ModalWrapper = ({ args }: { args: any }) => {
   const [open, setOpen] = useState(false);
 

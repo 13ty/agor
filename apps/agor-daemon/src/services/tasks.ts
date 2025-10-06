@@ -47,6 +47,7 @@ export class TasksService extends DrizzleService<Task, Partial<Task>, TaskParams
   /**
    * Override find to support session-based filtering
    */
+  // biome-ignore lint/suspicious/noExplicitAny: Returns Paginated<Task> or Task[] depending on pagination
   async find(params?: TaskParams): Promise<any> {
     // If filtering by session_id, use repository method
     if (params?.query?.session_id) {
