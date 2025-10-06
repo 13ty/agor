@@ -50,8 +50,6 @@ const SessionDrawer = ({
   onFork,
   onSubtask,
 }: SessionDrawerProps) => {
-  if (!session) return null;
-
   const [inputValue, setInputValue] = React.useState('');
 
   const handleSendPrompt = () => {
@@ -123,6 +121,9 @@ const SessionDrawer = ({
         return 'gray';
     }
   };
+
+  // Early return if no session
+  if (!session) return null;
 
   const isForked = !!session.genealogy.forked_from_session_id;
   const isSpawned = !!session.genealogy.parent_session_id;

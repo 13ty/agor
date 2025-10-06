@@ -45,6 +45,8 @@ const SessionHeader = ({ session, onClick, showCounts = true }: SessionHeaderPro
   const isSpawned = !!session.genealogy.parent_session_id;
 
   return (
+    // biome-ignore lint/a11y/useKeyWithClickEvents: UI prototype - keyboard events will be added in production
+    // biome-ignore lint/a11y/noStaticElementInteractions: UI prototype - proper semantics will be added in production
     <div className={`session-header-component ${onClick ? 'clickable' : ''}`} onClick={onClick}>
       <div className="header-main">
         <Space size={8} align="center">

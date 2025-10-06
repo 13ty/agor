@@ -6,13 +6,12 @@ import {
   LoadingOutlined,
   PlusCircleOutlined,
 } from '@ant-design/icons';
-import { Badge, Button, Collapse, Space, Spin, Tag, Typography, theme } from 'antd';
+import { Badge, Button, Card, Collapse, Space, Spin, Tag, Typography } from 'antd';
 import type { Session, Task } from '../../types';
 import TaskListItem from '../TaskListItem';
 import './SessionCard.css';
 
 const { Text } = Typography;
-const { useToken } = theme;
 
 const SESSION_CARD_MAX_WIDTH = 480;
 
@@ -31,8 +30,6 @@ const SessionCard = ({
   onSessionClick,
   defaultExpanded = true,
 }: SessionCardProps) => {
-  const { token } = useToken();
-
   const getAgentIcon = () => {
     const agentIcons: Record<string, string> = {
       'claude-code': '🤖',
@@ -99,25 +96,22 @@ const SessionCard = ({
   );
 
   return (
-    <div
-      style={{
-        background: token.colorBgContainer,
-        borderRadius: token.borderRadiusLG,
-        border: `1px solid ${token.colorBorder}`,
-        padding: 16,
-        maxWidth: SESSION_CARD_MAX_WIDTH,
+    <Card
+      style={{ maxWidth: SESSION_CARD_MAX_WIDTH }}
+      styles={{
+        body: { padding: 16 },
       }}
+      onClick={onSessionClick}
+      hoverable={!!onSessionClick}
     >
-      {/* Session header - clickable area to open drawer */}
+      {/* Session header */}
       <div
         style={{
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
           marginBottom: 12,
-          cursor: onSessionClick ? 'pointer' : 'default',
         }}
-        onClick={onSessionClick}
       >
         <Space size={8} align="center">
           <span style={{ fontSize: 20 }}>{getAgentIcon()}</span>
@@ -164,8 +158,8 @@ const SessionCard = ({
         </Space>
       </div>
 
-      {/* Session metadata - clickable area to open drawer */}
-      <div style={{ cursor: onSessionClick ? 'pointer' : 'default' }} onClick={onSessionClick}>
+      {/* Session metadata */}
+      <div>
         {/* Description */}
         {session.description && (
           <Text strong style={{ fontSize: 16, display: 'block', marginBottom: 8 }}>
@@ -222,7 +216,7 @@ const SessionCard = ({
           💬 {session.message_count} messages
         </Text>
       </div>
-    </div>
+    </Card>
   );
 };
 

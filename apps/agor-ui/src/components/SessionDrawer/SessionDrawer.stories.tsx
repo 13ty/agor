@@ -15,6 +15,7 @@ const meta = {
 } satisfies Meta<typeof SessionDrawer>;
 
 export default meta;
+// biome-ignore lint/correctness/noUnusedVariables: Story type used for type annotations below
 type Story = StoryObj<typeof meta>;
 
 // Interactive story with button to open drawer
