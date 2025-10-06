@@ -20,6 +20,8 @@ interface SessionCanvasProps {
   tasks: Record<string, Task[]>;
   onSessionClick?: (sessionId: string) => void;
   onTaskClick?: (taskId: string) => void;
+  onSessionUpdate?: (sessionId: string, updates: Partial<Session>) => void;
+  onSessionDelete?: (sessionId: string) => void;
 }
 
 interface SessionNodeData {
@@ -27,6 +29,8 @@ interface SessionNodeData {
   tasks: Task[];
   onTaskClick?: (taskId: string) => void;
   onSessionClick?: () => void;
+  onUpdate?: (sessionId: string, updates: Partial<Session>) => void;
+  onDelete?: (sessionId: string) => void;
   compact?: boolean;
 }
 
@@ -39,6 +43,8 @@ const SessionNode = ({ data }: { data: SessionNodeData }) => {
         tasks={data.tasks}
         onTaskClick={data.onTaskClick}
         onSessionClick={data.onSessionClick}
+        onUpdate={data.onUpdate}
+        onDelete={data.onDelete}
         compact={data.compact}
       />
     </div>
@@ -49,7 +55,14 @@ const nodeTypes = {
   sessionNode: SessionNode,
 };
 
-const SessionCanvas = ({ sessions, tasks, onSessionClick, onTaskClick }: SessionCanvasProps) => {
+const SessionCanvas = ({
+  sessions,
+  tasks,
+  onSessionClick,
+  onTaskClick,
+  onSessionUpdate,
+  onSessionDelete,
+}: SessionCanvasProps) => {
   // Convert sessions to React Flow nodes
   const initialNodes: Node[] = useMemo(() => {
     // Simple layout algorithm: place nodes vertically with offset for children
@@ -98,11 +111,13 @@ const SessionCanvas = ({ sessions, tasks, onSessionClick, onTaskClick }: Session
           tasks: tasks[session.session_id] || [],
           onTaskClick,
           onSessionClick: () => onSessionClick?.(session.session_id),
+          onUpdate: onSessionUpdate,
+          onDelete: onSessionDelete,
           compact: false,
         },
       };
     });
-  }, [sessions, tasks, onSessionClick, onTaskClick]);
+  }, [sessions, tasks, onSessionClick, onTaskClick, onSessionUpdate, onSessionDelete]);
 
   // Convert session relationships to React Flow edges
   const initialEdges: Edge[] = useMemo(() => {
