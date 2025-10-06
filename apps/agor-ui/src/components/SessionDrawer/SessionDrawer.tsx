@@ -205,18 +205,34 @@ const SessionDrawer = ({
         </Space>
       </div>
 
-      {/* Worktree Info */}
-      {session.worktree && (
+      {/* Repository/Worktree Info */}
+      {session.repo && (
         <div className="drawer-section">
-          <Title level={5}>Worktree</Title>
-          <Text>
-            Path: <Text code>{session.worktree.path}</Text>
-          </Text>
-          {session.worktree.managed_by_agor && (
-            <Tag color="blue" style={{ marginLeft: 8 }}>
-              Managed by Agor
-            </Tag>
-          )}
+          <Title level={5}>Repository</Title>
+          <Space direction="vertical" size={4}>
+            <Text>
+              <GithubOutlined />{' '}
+              {session.repo.repo_slug && session.repo.worktree_name ? (
+                <>
+                  <Text code>
+                    {session.repo.repo_slug}:{session.repo.worktree_name}
+                  </Text>
+                  {session.repo.managed_worktree && (
+                    <Tag color="blue" style={{ marginLeft: 8 }}>
+                      Managed
+                    </Tag>
+                  )}
+                </>
+              ) : session.repo.repo_slug ? (
+                <Text code>{session.repo.repo_slug}</Text>
+              ) : (
+                <Text code>{session.repo.cwd.split('/').pop() || session.repo.cwd}</Text>
+              )}
+            </Text>
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              <CodeOutlined /> {session.repo.cwd}
+            </Text>
+          </Space>
         </div>
       )}
 
@@ -225,7 +241,7 @@ const SessionDrawer = ({
         <div className="drawer-section">
           <Title level={5}>Loaded Concepts</Title>
           <Space size={8} wrap>
-            {session.concepts.map((concept) => (
+            {session.concepts.map(concept => (
               <Tag key={concept} color="geekblue">
                 📦 {concept}
               </Tag>
@@ -244,7 +260,7 @@ const SessionDrawer = ({
 
         <Timeline
           mode="left"
-          items={tasks.map((task) => ({
+          items={tasks.map(task => ({
             color: getTaskStatusColor(task.status),
             dot: task.status === 'running' ? <ClockCircleOutlined /> : undefined,
             children: (
@@ -372,10 +388,10 @@ const SessionDrawer = ({
         <Space.Compact style={{ width: '100%' }} direction="vertical" size={8}>
           <TextArea
             value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
+            onChange={e => setInputValue(e.target.value)}
             placeholder="Send a prompt, fork, or create a subtask..."
             autoSize={{ minRows: 2, maxRows: 6 }}
-            onPressEnter={(e) => {
+            onPressEnter={e => {
               if (e.shiftKey) {
                 // Allow Shift+Enter for new line
                 return;

@@ -40,6 +40,11 @@
       "types": "./dist/config/index.d.ts",
       "import": "./dist/config/index.js",
       "require": "./dist/config/index.cjs"
+    },
+    "./tools": {
+      "types": "./dist/tools/index.d.ts",
+      "import": "./dist/tools/index.js",
+      "require": "./dist/tools/index.cjs"
     }
   },
   "scripts": {

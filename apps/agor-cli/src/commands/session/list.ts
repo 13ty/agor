@@ -157,6 +157,7 @@ export default class SessionList extends Command {
           chalk.cyan('Agent'),
           chalk.cyan('Status'),
           chalk.cyan('Tasks'),
+          chalk.cyan('Worktree'),
           chalk.cyan('Git Ref'),
           chalk.cyan('Modified'),
         ],
@@ -164,7 +165,7 @@ export default class SessionList extends Command {
           head: [],
           border: ['dim'],
         },
-        colWidths: [10, 35, 15, 12, 8, 15, 12],
+        colWidths: [10, 30, 13, 12, 8, 18, 15, 12],
       });
 
       // Add rows
@@ -175,11 +176,14 @@ export default class SessionList extends Command {
         const description = this.truncate(
           session.description ||
             (firstTask && 'full_prompt' in firstTask ? firstTask.full_prompt : '(no description)'),
-          32
+          28
         );
         const taskCount = session.tasks?.length || 0;
         const completedTasks =
           session.tasks?.filter((t: { status: string }) => t.status === 'completed').length || 0;
+        const worktree = session.repo?.worktree_name
+          ? `${session.repo.repo_slug}:${session.repo.worktree_name}`
+          : session.repo?.repo_slug || '-';
         const gitRef = session.git_state?.ref || '-';
         const modified = this.formatRelativeTime(session.last_updated || session.created_at);
 
@@ -189,6 +193,7 @@ export default class SessionList extends Command {
           session.agent,
           this.formatStatus(session.status),
           `${completedTasks}/${taskCount}`,
+          chalk.dim(worktree),
           chalk.dim(gitRef),
           chalk.dim(modified),
         ]);
@@ -206,7 +211,7 @@ export default class SessionList extends Command {
       this.log('');
 
       // Close socket connection and wait for it to close
-      await new Promise<void>((resolve) => {
+      await new Promise<void>(resolve => {
         client.io.on('disconnect', resolve);
         client.io.close();
         setTimeout(resolve, 1000); // Fallback timeout

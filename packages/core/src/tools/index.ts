@@ -1,0 +1,8 @@
+/**
+ * Agentic Tool Integrations
+ *
+ * Tools: External agentic coding products (Claude Code, Cursor, Codex, Gemini)
+ */
+
+export * from './base';
+export * from './claude';

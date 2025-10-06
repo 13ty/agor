@@ -9,6 +9,7 @@ export default defineConfig({
     'api/index': 'src/api/index.ts',
     'claude/index': 'src/claude/index.ts',
     'config/index': 'src/config/index.ts',
+    'tools/index': 'src/tools/index.ts',
   },
   format: ['cjs', 'esm'],
   dts: true,

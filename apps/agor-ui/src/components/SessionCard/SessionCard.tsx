@@ -194,18 +194,6 @@ const SessionCard = ({
             style={{ cursor: 'grab' }}
           />
           <div className="nodrag">
-            {onUpdate && (
-              <Button
-                type="text"
-                size="small"
-                icon={<SettingOutlined />}
-                onClick={e => {
-                  e.stopPropagation();
-                  setSettingsOpen(true);
-                }}
-                title="Session settings"
-              />
-            )}
             {onSessionClick && (
               <Button
                 type="text"
@@ -216,6 +204,18 @@ const SessionCard = ({
                   onSessionClick();
                 }}
                 title="Open in drawer"
+              />
+            )}
+            {onUpdate && (
+              <Button
+                type="text"
+                size="small"
+                icon={<SettingOutlined />}
+                onClick={e => {
+                  e.stopPropagation();
+                  setSettingsOpen(true);
+                }}
+                title="Session settings"
               />
             )}
             {onDelete && (
@@ -257,6 +257,20 @@ const SessionCard = ({
             )}
           </Space>
         </div>
+
+        {/* Repo/Worktree */}
+        {session.repo && (
+          <div style={{ marginBottom: 8 }}>
+            <Text type="secondary">
+              📂{' '}
+              {session.repo.repo_slug
+                ? session.repo.worktree_name
+                  ? `${session.repo.repo_slug}:${session.repo.worktree_name}`
+                  : session.repo.repo_slug
+                : session.repo.cwd}
+            </Text>
+          </div>
+        )}
 
         {/* Concepts */}
         {session.concepts.length > 0 && (

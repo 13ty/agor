@@ -5,13 +5,14 @@
  */
 
 import type { AgorClient } from '@agor/core/api';
-import type { Board, Session, Task } from '@agor/core/types';
+import type { Board, Repo, Session, Task } from '@agor/core/types';
 import { useCallback, useEffect, useState } from 'react';
 
 interface UseAgorDataResult {
   sessions: Session[];
   tasks: Record<string, Task[]>;
   boards: Board[];
+  repos: Repo[];
   loading: boolean;
   error: string | null;
   refetch: () => Promise<void>;
@@ -27,6 +28,7 @@ export function useAgorData(client: AgorClient | null): UseAgorDataResult {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [tasks, setTasks] = useState<Record<string, Task[]>>({});
   const [boards, setBoards] = useState<Board[]>([]);
+  const [repos, setRepos] = useState<Repo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -38,17 +40,19 @@ export function useAgorData(client: AgorClient | null): UseAgorDataResult {
       setLoading(true);
       setError(null);
 
-      // Fetch sessions, tasks, boards in parallel
-      const [sessionsResult, tasksResult, boardsResult] = await Promise.all([
+      // Fetch sessions, tasks, boards, repos in parallel
+      const [sessionsResult, tasksResult, boardsResult, reposResult] = await Promise.all([
         client.service('sessions').find(),
-        client.service('tasks').find(),
+        client.service('tasks').find({ query: { $limit: 500 } }), // Fetch up to 500 tasks
         client.service('boards').find(),
+        client.service('repos').find(),
       ]);
 
       // Handle paginated vs array results
       const sessionsList = Array.isArray(sessionsResult) ? sessionsResult : sessionsResult.data;
       const tasksList = Array.isArray(tasksResult) ? tasksResult : tasksResult.data;
       const boardsList = Array.isArray(boardsResult) ? boardsResult : boardsResult.data;
+      const reposList = Array.isArray(reposResult) ? reposResult : reposResult.data;
 
       setSessions(sessionsList);
 
@@ -63,6 +67,7 @@ export function useAgorData(client: AgorClient | null): UseAgorDataResult {
       setTasks(tasksMap);
 
       setBoards(boardsList);
+      setRepos(reposList);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch data');
     } finally {
@@ -80,13 +85,13 @@ export function useAgorData(client: AgorClient | null): UseAgorDataResult {
     // Subscribe to session events
     const sessionsService = client.service('sessions');
     const handleSessionCreated = (session: Session) => {
-      setSessions((prev) => [...prev, session]);
+      setSessions(prev => [...prev, session]);
     };
     const handleSessionPatched = (session: Session) => {
-      setSessions((prev) => prev.map((s) => (s.session_id === session.session_id ? session : s)));
+      setSessions(prev => prev.map(s => (s.session_id === session.session_id ? session : s)));
     };
     const handleSessionRemoved = (session: Session) => {
-      setSessions((prev) => prev.filter((s) => s.session_id !== session.session_id));
+      setSessions(prev => prev.filter(s => s.session_id !== session.session_id));
     };
 
     sessionsService.on('created', handleSessionCreated);
@@ -97,23 +102,23 @@ export function useAgorData(client: AgorClient | null): UseAgorDataResult {
     // Subscribe to task events
     const tasksService = client.service('tasks');
     const handleTaskCreated = (task: Task) => {
-      setTasks((prev) => ({
+      setTasks(prev => ({
         ...prev,
         [task.session_id]: [...(prev[task.session_id] || []), task],
       }));
     };
     const handleTaskPatched = (task: Task) => {
-      setTasks((prev) => ({
+      setTasks(prev => ({
         ...prev,
-        [task.session_id]: (prev[task.session_id] || []).map((t) =>
+        [task.session_id]: (prev[task.session_id] || []).map(t =>
           t.task_id === task.task_id ? task : t
         ),
       }));
     };
     const handleTaskRemoved = (task: Task) => {
-      setTasks((prev) => ({
+      setTasks(prev => ({
         ...prev,
-        [task.session_id]: (prev[task.session_id] || []).filter((t) => t.task_id !== task.task_id),
+        [task.session_id]: (prev[task.session_id] || []).filter(t => t.task_id !== task.task_id),
       }));
     };
 
@@ -125,19 +130,36 @@ export function useAgorData(client: AgorClient | null): UseAgorDataResult {
     // Subscribe to board events
     const boardsService = client.service('boards');
     const handleBoardCreated = (board: Board) => {
-      setBoards((prev) => [...prev, board]);
+      setBoards(prev => [...prev, board]);
     };
     const handleBoardPatched = (board: Board) => {
-      setBoards((prev) => prev.map((b) => (b.board_id === board.board_id ? board : b)));
+      setBoards(prev => prev.map(b => (b.board_id === board.board_id ? board : b)));
     };
     const handleBoardRemoved = (board: Board) => {
-      setBoards((prev) => prev.filter((b) => b.board_id !== board.board_id));
+      setBoards(prev => prev.filter(b => b.board_id !== board.board_id));
     };
 
     boardsService.on('created', handleBoardCreated);
     boardsService.on('patched', handleBoardPatched);
     boardsService.on('updated', handleBoardPatched);
     boardsService.on('removed', handleBoardRemoved);
+
+    // Subscribe to repo events
+    const reposService = client.service('repos');
+    const handleRepoCreated = (repo: Repo) => {
+      setRepos(prev => [...prev, repo]);
+    };
+    const handleRepoPatched = (repo: Repo) => {
+      setRepos(prev => prev.map(r => (r.repo_id === repo.repo_id ? repo : r)));
+    };
+    const handleRepoRemoved = (repo: Repo) => {
+      setRepos(prev => prev.filter(r => r.repo_id !== repo.repo_id));
+    };
+
+    reposService.on('created', handleRepoCreated);
+    reposService.on('patched', handleRepoPatched);
+    reposService.on('updated', handleRepoPatched);
+    reposService.on('removed', handleRepoRemoved);
 
     // Cleanup listeners on unmount
     return () => {
@@ -155,6 +177,11 @@ export function useAgorData(client: AgorClient | null): UseAgorDataResult {
       boardsService.removeListener('patched', handleBoardPatched);
       boardsService.removeListener('updated', handleBoardPatched);
       boardsService.removeListener('removed', handleBoardRemoved);
+
+      reposService.removeListener('created', handleRepoCreated);
+      reposService.removeListener('patched', handleRepoPatched);
+      reposService.removeListener('updated', handleRepoPatched);
+      reposService.removeListener('removed', handleRepoRemoved);
     };
   }, [client, fetchData]);
 
@@ -162,6 +189,7 @@ export function useAgorData(client: AgorClient | null): UseAgorDataResult {
     sessions,
     tasks,
     boards,
+    repos,
     loading,
     error,
     refetch: fetchData,
