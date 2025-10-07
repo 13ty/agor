@@ -13,16 +13,16 @@
  *   npm run test:integration
  */
 
-import type { Session } from '@agor/core/types';
-import { createDatabase } from '../src/client';
-import { formatShortId, generateId } from '../src/ids';
-import { initializeDatabase, seedInitialData } from '../src/migrate';
+import type { Session } from '../../types';
+import { createDatabase } from '../client';
+import { formatShortId, generateId } from '../ids';
+import { initializeDatabase, seedInitialData } from '../migrate';
 import {
   BoardRepository,
   RepoRepository,
   SessionRepository,
   TaskRepository,
-} from '../src/repositories';
+} from '../repositories';
 
 // Test database path
 const TEST_DB_PATH = 'file:/tmp/agor-test.db';
@@ -320,7 +320,7 @@ async function testGenealogy(db: ReturnType<typeof createDatabase>) {
     throw new Error(`Expected 2 children, got ${children.length}`);
   }
 
-  const childIds = children.map((c) => c.session_id).sort();
+  const childIds = children.map((c: Session) => c.session_id).sort();
   const expectedIds = [fork.session_id, spawn.session_id].sort();
 
   if (JSON.stringify(childIds) !== JSON.stringify(expectedIds)) {

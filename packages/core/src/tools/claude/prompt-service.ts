@@ -21,8 +21,9 @@ function toAnthropicMessage(message: Message): Anthropic.MessageParam {
   if (typeof message.content === 'string') {
     content = message.content;
   } else {
-    // Content is already ContentBlock[] - map to Anthropic format
-    content = message.content as Anthropic.ContentBlock[];
+    // Content is ContentBlock[] - cast to unknown first for type safety
+    // biome-ignore lint/suspicious/noExplicitAny: Anthropic SDK types are structurally compatible
+    content = message.content as any;
   }
 
   return {
@@ -104,7 +105,10 @@ export class ClaudePromptService {
       max_tokens: 8000,
       messages,
       // System prompt could include repo context, concepts, etc.
-      system: this.buildSystemPrompt(session),
+      system: this.buildSystemPrompt({
+        repo: session.repo.repo_slug ? { slug: session.repo.repo_slug } : undefined,
+        git_state: session.git_state,
+      }),
     });
 
     // Wait for complete message
@@ -123,14 +127,15 @@ export class ClaudePromptService {
    * Build system prompt with session context
    */
   private buildSystemPrompt(session: {
-    repo: { repo_id: string; slug: string };
-    git_state: { ref: string };
+    repo?: { slug?: string };
+    git_state?: { ref?: string };
   }): string {
+    const repoInfo = session.repo?.slug ? `Repository: ${session.repo.slug}\n` : '';
+    const branchInfo = session.git_state?.ref ? `Branch: ${session.git_state.ref}\n` : '';
+
     return `You are Claude, an AI assistant helping with software development.
 
-Repository: ${session.repo.slug}
-Branch: ${session.git_state.ref}
-
+${repoInfo}${branchInfo}
 Provide clear, concise assistance with coding tasks.`;
   }
 }
