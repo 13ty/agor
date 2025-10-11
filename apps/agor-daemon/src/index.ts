@@ -103,9 +103,8 @@ async function main() {
     jwtSecret = crypto.randomBytes(32).toString('hex');
 
     // Save to config so it persists across restarts
-    const { ConfigManager } = await import('@agor/core/config');
-    const configManager = new ConfigManager();
-    await configManager.set('daemon.jwtSecret', jwtSecret);
+    const { setConfigValue } = await import('@agor/core/config');
+    await setConfigValue('daemon.jwtSecret', jwtSecret);
 
     console.log('🔑 Generated and saved persistent JWT secret to config');
   }
