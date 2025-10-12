@@ -85,14 +85,7 @@ export function LoginPage({ onLogin, loading = false, error }: LoginPageProps) {
         )}
 
         {/* Login Form */}
-        <Form
-          form={form}
-          name="login"
-          layout="vertical"
-          onFinish={handleSubmit}
-          autoComplete="off"
-          size="large"
-        >
+        <Form form={form} name="login" layout="vertical" onFinish={handleSubmit} autoComplete="off">
           <Form.Item
             name="email"
             rules={[
@@ -119,14 +112,7 @@ export function LoginPage({ onLogin, loading = false, error }: LoginPageProps) {
           </Form.Item>
 
           <Form.Item style={{ marginBottom: 8 }}>
-            <Button
-              type="primary"
-              htmlType="submit"
-              loading={submitting || loading}
-              block
-              size="large"
-              style={{ height: 48 }}
-            >
+            <Button type="primary" htmlType="submit" loading={submitting || loading} block>
               Sign In
             </Button>
           </Form.Item>

@@ -24,6 +24,7 @@ import { feathers } from '@feathersjs/feathers';
 import socketio from '@feathersjs/socketio';
 import cors from 'cors';
 import express from 'express';
+import jwt from 'jsonwebtoken';
 import { createBoardsService } from './services/boards';
 import { createMCPServersService } from './services/mcp-servers';
 import { createMessagesService } from './services/messages';
@@ -304,8 +305,6 @@ async function main() {
             context.result.user &&
             context.result.user.user_id !== 'anonymous'
           ) {
-            const jwt = await import('jsonwebtoken');
-
             // Generate refresh token (30 days)
             const refreshToken = jwt.sign(
               {
@@ -332,8 +331,6 @@ async function main() {
   // Refresh token endpoint
   app.use('/authentication/refresh', {
     async create(data: { refreshToken: string }) {
-      const jwt = await import('jsonwebtoken');
-
       try {
         // Verify refresh token
         const decoded = jwt.verify(data.refreshToken, jwtSecret, {

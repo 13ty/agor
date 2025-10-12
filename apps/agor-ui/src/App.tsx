@@ -577,7 +577,20 @@ function AppContent() {
 
 function App() {
   return (
-    <ConfigProvider theme={{ algorithm: theme.darkAlgorithm }}>
+    <ConfigProvider
+      theme={{
+        algorithm: theme.darkAlgorithm,
+        token: {
+          colorPrimary: '#3ac1b8', // Agor teal - primary brand color
+          colorSuccess: '#52c41a', // Keep Ant Design's vibrant green
+          colorWarning: '#faad14', // Keep Ant Design's amber
+          colorError: '#ff4d4f', // Keep Ant Design's red
+          colorInfo: '#3ac1b8', // Match primary
+          colorLink: '#3ac1b8', // Match primary for consistency
+          borderRadius: 8, // Slightly more rounded for modern feel
+        },
+      }}
+    >
       <AntApp>
         <AppContent />
       </AntApp>
