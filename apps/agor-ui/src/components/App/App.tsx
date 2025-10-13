@@ -34,7 +34,11 @@ export interface AppProps {
   onCreateSession?: (config: NewSessionConfig, boardId: string) => void;
   onForkSession?: (sessionId: string, prompt: string) => void;
   onSpawnSession?: (sessionId: string, prompt: string) => void;
-  onSendPrompt?: (sessionId: string, prompt: string) => void;
+  onSendPrompt?: (
+    sessionId: string,
+    prompt: string,
+    permissionMode?: import('../SessionDrawer').PermissionMode
+  ) => void;
   onUpdateSession?: (sessionId: string, updates: Partial<Session>) => void;
   onDeleteSession?: (sessionId: string) => void;
   onCreateBoard?: (board: Partial<Board>) => void;
@@ -109,14 +113,21 @@ export const App: React.FC<AppProps> = ({
     setSelectedSessionId(sessionId);
   };
 
-  const handleSendPrompt = async (prompt: string) => {
+  const handleSendPrompt = async (
+    prompt: string,
+    permissionMode?: import('../SessionDrawer').PermissionMode
+  ) => {
     if (selectedSessionId) {
       // Show loading state
-      console.log('Sending prompt to Claude...', { sessionId: selectedSessionId, prompt });
+      console.log('Sending prompt to Claude...', {
+        sessionId: selectedSessionId,
+        prompt,
+        permissionMode,
+      });
 
       // Call the prompt endpoint
       // Note: onSendPrompt should be implemented in the parent to call the daemon
-      onSendPrompt?.(selectedSessionId, prompt);
+      onSendPrompt?.(selectedSessionId, prompt, permissionMode);
     }
   };
 
@@ -136,12 +147,15 @@ export const App: React.FC<AppProps> = ({
     sessionId: string,
     requestId: string,
     taskId: string,
-    allow: boolean
+    allow: boolean,
+    scope: 'once' | 'session' | 'project'
   ) => {
     if (!client) return;
 
     try {
-      console.log(`📋 Permission decision: ${allow ? 'ALLOW' : 'DENY'} for task ${taskId}`);
+      console.log(
+        `📋 Permission decision: ${allow ? 'ALLOW' : 'DENY'} (${scope}) for task ${taskId}`
+      );
 
       // Call the permission decision endpoint
       await client.service(`sessions/${sessionId}/permission-decision`).create({
@@ -149,8 +163,8 @@ export const App: React.FC<AppProps> = ({
         taskId,
         allow,
         reason: allow ? 'Approved by user' : 'Denied by user',
-        remember: false,
-        scope: 'once',
+        remember: scope !== 'once', // Only remember if not 'once'
+        scope,
         decidedBy: user?.user_id || 'anonymous',
       });
 

@@ -10,6 +10,7 @@
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import type { PermissionMode } from '@anthropic-ai/claude-agent-sdk';
 import { generateId } from '../../db/ids';
 import type { MessagesRepository } from '../../db/repositories/messages';
 import type { SessionMCPServerRepository } from '../../db/repositories/session-mcp-servers';
@@ -41,6 +42,15 @@ export interface TasksService {
   patch(id: string, data: Partial<any>): Promise<any>;
 }
 
+/**
+ * Service interface for updating sessions via FeathersJS
+ * This ensures WebSocket events are emitted when sessions are updated (e.g., permission config)
+ */
+export interface SessionsService {
+  // biome-ignore lint/suspicious/noExplicitAny: FeathersJS service accepts partial session updates
+  patch(id: string, data: Partial<any>): Promise<any>;
+}
+
 export class ClaudeTool implements ITool {
   readonly toolType = 'claude-code' as const;
   readonly name = 'Claude Code';
@@ -54,7 +64,8 @@ export class ClaudeTool implements ITool {
     private messagesService?: MessagesService,
     private sessionMCPRepo?: SessionMCPServerRepository,
     private permissionService?: PermissionService,
-    private tasksService?: TasksService
+    private tasksService?: TasksService,
+    private sessionsService?: SessionsService
   ) {
     if (messagesRepo && sessionsRepo) {
       this.promptService = new ClaudePromptService(
@@ -63,7 +74,8 @@ export class ClaudeTool implements ITool {
         apiKey,
         sessionMCPRepo,
         permissionService,
-        tasksService
+        tasksService,
+        sessionsService
       );
     }
   }
@@ -132,7 +144,8 @@ export class ClaudeTool implements ITool {
   async executePrompt(
     sessionId: SessionID,
     prompt: string,
-    taskId?: TaskID
+    taskId?: TaskID,
+    permissionMode?: PermissionMode
   ): Promise<{ userMessageId: MessageID; assistantMessageIds: MessageID[] }> {
     if (!this.promptService || !this.messagesRepo) {
       throw new Error('ClaudeTool not initialized with repositories for live execution');
@@ -171,7 +184,8 @@ export class ClaudeTool implements ITool {
     for await (const assistantMsg of this.promptService.promptSessionStreaming(
       sessionId,
       prompt,
-      taskId
+      taskId,
+      permissionMode
     )) {
       // Capture Agent SDK session_id from first message
       if (!capturedAgentSessionId && assistantMsg.agentSessionId) {

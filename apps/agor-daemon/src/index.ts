@@ -18,6 +18,7 @@ import {
 import { type PermissionDecision, PermissionService } from '@agor/core/permissions';
 import { ClaudeTool } from '@agor/core/tools';
 import type { SessionID } from '@agor/core/types';
+import type { PermissionMode } from '@anthropic-ai/claude-agent-sdk';
 import { AuthenticationService, JWTStrategy } from '@feathersjs/authentication';
 import { LocalStrategy } from '@feathersjs/authentication-local';
 import feathersExpress, { errorHandler, rest } from '@feathersjs/express';
@@ -407,7 +408,8 @@ async function main() {
     app.service('messages'),
     sessionMCPRepo,
     permissionService,
-    app.service('tasks') // Use service instead of repo for WebSocket events
+    app.service('tasks'), // Use service instead of repo for WebSocket events
+    app.service('sessions') // Sessions service for permission persistence (WebSocket broadcast)
   );
 
   // Configure custom route for bulk message creation
@@ -449,7 +451,7 @@ async function main() {
   } as any);
 
   app.use('/sessions/:id/prompt', {
-    async create(data: { prompt: string }, params: RouteParams) {
+    async create(data: { prompt: string; permissionMode?: PermissionMode }, params: RouteParams) {
       const id = params.route?.id;
       if (!id) throw new Error('Session ID required');
       if (!data.prompt) throw new Error('Prompt required');
@@ -490,7 +492,7 @@ async function main() {
       // This ensures WebSocket events flush immediately, not batched with request
       setImmediate(() => {
         claudeTool
-          .executePrompt(id as SessionID, data.prompt, task.task_id)
+          .executePrompt(id as SessionID, data.prompt, task.task_id, data.permissionMode)
           .then(async result => {
             try {
               // PHASE 3: Mark task as completed and update message count
@@ -570,6 +572,8 @@ async function main() {
       if (!id) throw new Error('Session ID required');
       if (!data.requestId) throw new Error('requestId required');
       if (typeof data.allow !== 'boolean') throw new Error('allow field required');
+
+      console.log(`📨 Received permission decision:`, JSON.stringify(data, null, 2));
 
       // Resolve the pending permission request
       permissionService.resolvePermission(data);

@@ -9,14 +9,18 @@ import { execSync } from 'node:child_process';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { query } from '@anthropic-ai/claude-agent-sdk';
-import type { HookJSONOutput, PreToolUseHookInput } from '@anthropic-ai/claude-agent-sdk/sdkTypes';
+import type {
+  HookJSONOutput,
+  PermissionMode,
+  PreToolUseHookInput,
+} from '@anthropic-ai/claude-agent-sdk/sdkTypes';
 import { generateId } from '../../db/ids';
 import type { MessagesRepository } from '../../db/repositories/messages';
 import type { SessionMCPServerRepository } from '../../db/repositories/session-mcp-servers';
 import type { SessionRepository } from '../../db/repositories/sessions';
 import type { PermissionService } from '../../permissions/permission-service';
 import type { MCPServersConfig, Message, SessionID, TaskID } from '../../types';
-import type { TasksService } from './claude-tool';
+import type { SessionsService, TasksService } from './claude-tool';
 
 /**
  * Get path to Claude Code executable
@@ -78,7 +82,8 @@ export class ClaudePromptService {
     private apiKey?: string,
     private sessionMCPRepo?: SessionMCPServerRepository,
     private permissionService?: PermissionService,
-    private tasksService?: TasksService
+    private tasksService?: TasksService,
+    private sessionsService?: SessionsService // FeathersJS Sessions service for WebSocket broadcasting
   ) {
     // No client initialization needed - Agent SDK is stateless
   }
@@ -111,8 +116,14 @@ export class ClaudePromptService {
 
       try {
         // Check session-specific permission overrides first
+        // IMPORTANT: Always fetch fresh session data to catch recently saved permissions
         const session = await this.sessionsRepo.findById(sessionId);
-        if (session?.data?.permission_config?.allowedTools?.includes(input.tool_name)) {
+        console.log(`🔍 Checking permissions for ${input.tool_name}...`);
+        console.log(
+          `   Session allowedTools: ${JSON.stringify(session?.permission_config?.allowedTools || [])}`
+        );
+
+        if (session?.permission_config?.allowedTools?.includes(input.tool_name)) {
           console.log(`🛡️  Permission: ${input.tool_name} auto-allowed by session config`);
           return {
             hookSpecificOutput: {
@@ -122,6 +133,7 @@ export class ClaudePromptService {
             },
           };
         }
+        console.log(`   → Not in allowlist, asking user...`);
 
         // Generate request ID
         const requestId = generateId();
@@ -171,9 +183,16 @@ export class ClaudePromptService {
           taskId,
           options.signal
         );
-        console.log(
-          `✅ Decision received: ${decision.allow ? 'ALLOW' : 'DENY'} by user ${decision.decidedBy}`
-        );
+        console.log('');
+        console.log('═══════════════════════════════════════════════════════════');
+        console.log('📨 DECISION RECEIVED FROM UI:');
+        console.log(`   decision.allow: ${decision.allow}`);
+        console.log(`   decision.remember: ${decision.remember}`);
+        console.log(`   decision.scope: ${decision.scope}`);
+        console.log(`   decision.reason: ${decision.reason}`);
+        console.log(`   decision.decidedBy: ${decision.decidedBy}`);
+        console.log('═══════════════════════════════════════════════════════════');
+        console.log('');
 
         // Update task with approval info and resume status via FeathersJS service
         // IMPORTANT: Must send full permission_request object, not dot notation
@@ -193,14 +212,53 @@ export class ClaudePromptService {
         );
 
         // Persist decision if user clicked "Remember"
-        if (decision.remember && session) {
+        console.log(
+          `💾 Checking if should persist: remember=${decision.remember}, scope=${decision.scope}`
+        );
+        if (decision.remember) {
+          // RE-FETCH session to get latest data (avoid stale closure)
+          const freshSession = await this.sessionsRepo.findById(sessionId);
+          if (!freshSession) {
+            console.error(`❌ Session ${sessionId} not found, cannot persist permission`);
+            return {
+              hookSpecificOutput: {
+                hookEventName: 'PreToolUse',
+                permissionDecision: decision.allow ? 'allow' : 'deny',
+                permissionDecisionReason: decision.reason,
+              },
+            };
+          }
+
           if (decision.scope === 'session') {
-            // Update session-level permissions in database
-            const currentAllowed = session.data?.permission_config?.allowedTools || [];
-            await this.sessionsRepo.update(sessionId, {
-              'data.permission_config.allowedTools': [...currentAllowed, input.tool_name],
-            });
-            console.log(`🛡️  Saved ${input.tool_name} to session ${sessionId} permissions`);
+            // Update session-level permissions via FeathersJS service (broadcasts WebSocket events)
+            const currentAllowed = freshSession.permission_config?.allowedTools || [];
+            console.log(`   Current allowed tools: ${JSON.stringify(currentAllowed)}`);
+
+            // IMPORTANT: Use FeathersJS service (if available) for WebSocket broadcasting
+            // Fall back to repository if service not available (e.g., in tests)
+            const newAllowedTools = [...currentAllowed, input.tool_name];
+            const updateData = {
+              permission_config: {
+                allowedTools: newAllowedTools,
+              },
+            };
+
+            if (this.sessionsService) {
+              console.log(`   📡 Updating via FeathersJS service (will broadcast to WebSocket)`);
+              await this.sessionsService.patch(sessionId, updateData);
+            } else {
+              console.log(
+                `   ⚠️  No SessionsService available, updating via repository (no WebSocket broadcast)`
+              );
+              await this.sessionsRepo.update(sessionId, updateData);
+            }
+            console.log(`🛡️  ✅ Saved ${input.tool_name} to session ${sessionId} permissions`);
+
+            // Verify it was saved
+            const verifySession = await this.sessionsRepo.findById(sessionId);
+            console.log(
+              `   Verification - allowedTools: ${JSON.stringify(verifySession?.permission_config?.allowedTools || [])}`
+            );
           } else if (decision.scope === 'project') {
             // Update project-level permissions in .claude/settings.json
             await this.updateProjectSettings(session.repo.cwd, {
@@ -302,7 +360,13 @@ export class ClaudePromptService {
    * Load session and initialize query
    * @private
    */
-  private async setupQuery(sessionId: SessionID, prompt: string, taskId?: TaskID, resume = true) {
+  private async setupQuery(
+    sessionId: SessionID,
+    prompt: string,
+    taskId?: TaskID,
+    permissionMode?: PermissionMode,
+    resume = true
+  ) {
     const session = await this.sessionsRepo.findById(sessionId);
     if (!session) {
       throw new Error(`Session not found: ${sessionId}`);
@@ -323,9 +387,25 @@ export class ClaudePromptService {
       pathToClaudeCodeExecutable: getClaudeCodePath(),
       // Allow access to common directories outside CWD (e.g., /tmp)
       additionalDirectories: ['/tmp', '/var/tmp'],
-      // TODO: Re-enable once we confirm hook can complete task update
-      // permissionMode: 'bypassPermissions',
     };
+
+    // Add permissionMode if provided
+    if (permissionMode) {
+      options.permissionMode = permissionMode;
+      console.log(`🛡️  Setting permissionMode: ${permissionMode}`);
+    }
+
+    // Add session-level allowed tools from our database
+    const sessionAllowedTools = session.permission_config?.allowedTools || [];
+    if (sessionAllowedTools.length > 0) {
+      options.allowedTools = sessionAllowedTools;
+      console.log(`🛡️  Passing allowedTools to SDK: ${JSON.stringify(sessionAllowedTools)}`);
+      console.log(`   These tools will be auto-allowed without firing the hook`);
+    } else {
+      console.log(
+        `🛡️  No allowedTools configured for this session - all tools will require permission`
+      );
+    }
 
     // Add PreToolUse hook if permission service is available and taskId provided
     if (this.permissionService && taskId) {
@@ -518,12 +598,14 @@ export class ClaudePromptService {
    * @param sessionId - Session to prompt
    * @param prompt - User prompt
    * @param taskId - Optional task ID for permission tracking
+   * @param permissionMode - Optional permission mode for SDK
    * @returns Async generator yielding assistant messages with SDK session ID
    */
   async *promptSessionStreaming(
     sessionId: SessionID,
     prompt: string,
-    taskId?: TaskID
+    taskId?: TaskID,
+    permissionMode?: PermissionMode
   ): AsyncGenerator<{
     content: Array<{
       type: string;
@@ -535,7 +617,7 @@ export class ClaudePromptService {
     toolUses?: Array<{ id: string; name: string; input: Record<string, unknown> }>;
     agentSessionId?: string;
   }> {
-    const result = await this.setupQuery(sessionId, prompt, taskId, true);
+    const result = await this.setupQuery(sessionId, prompt, taskId, permissionMode, true);
 
     // Collect and yield assistant messages progressively
     console.log('📥 Receiving messages from Agent SDK...');

@@ -6,9 +6,11 @@ import {
   DownOutlined,
   ForkOutlined,
   GithubOutlined,
+  SafetyOutlined,
   SendOutlined,
   SettingOutlined,
 } from '@ant-design/icons';
+import type { PermissionMode } from '@anthropic-ai/claude-agent-sdk';
 import {
   Badge,
   Button,
@@ -17,6 +19,7 @@ import {
   Dropdown,
   Flex,
   Input,
+  Select,
   Space,
   Tag,
   Tooltip,
@@ -45,6 +48,9 @@ import { ToolIcon } from '../ToolIcon';
 const { Title, Text } = Typography;
 const { TextArea } = Input;
 
+// Re-export PermissionMode from SDK for convenience
+export type { PermissionMode };
+
 interface SessionDrawerProps {
   client: AgorClient | null;
   session: Session | null;
@@ -54,7 +60,7 @@ interface SessionDrawerProps {
   sessionMcpServerIds?: string[];
   open: boolean;
   onClose: () => void;
-  onSendPrompt?: (prompt: string) => void;
+  onSendPrompt?: (prompt: string, permissionMode?: PermissionMode) => void;
   onFork?: (prompt: string) => void;
   onSubtask?: (prompt: string) => void;
   onPermissionDecision?: (
@@ -83,6 +89,7 @@ const SessionDrawer = ({
 }: SessionDrawerProps) => {
   const { token } = theme.useToken();
   const [inputValue, setInputValue] = React.useState('');
+  const [permissionMode, setPermissionMode] = React.useState<PermissionMode>('default');
   const [scrollToBottom, setScrollToBottom] = React.useState<(() => void) | null>(null);
 
   // Scroll to bottom when drawer opens
@@ -97,7 +104,7 @@ const SessionDrawer = ({
 
   const handleSendPrompt = () => {
     if (inputValue.trim()) {
-      onSendPrompt?.(inputValue);
+      onSendPrompt?.(inputValue, permissionMode);
       setInputValue('');
     }
   };
@@ -309,28 +316,58 @@ const SessionDrawer = ({
               <MessageCountPill count={session.message_count} />
               <ToolCountPill count={session.tool_use_count} />
             </Space>
-            <Button.Group>
-              <Tooltip title="Fork Session">
+            <Space size={8}>
+              {/* Permission Mode Selector - Only show for Claude Code sessions */}
+              {session.agent === 'claude-code' && (
+                <Select
+                  value={permissionMode}
+                  onChange={setPermissionMode}
+                  style={{ width: 160 }}
+                  size="small"
+                  options={[
+                    {
+                      label: 'Default',
+                      value: 'default',
+                    },
+                    {
+                      label: 'Accept Edits',
+                      value: 'acceptEdits',
+                    },
+                    {
+                      label: 'Bypass Permissions',
+                      value: 'bypassPermissions',
+                    },
+                    {
+                      label: 'Plan Mode',
+                      value: 'plan',
+                    },
+                  ]}
+                  suffixIcon={<SafetyOutlined />}
+                />
+              )}
+              <Button.Group>
+                <Tooltip title="Fork Session">
+                  <Button
+                    icon={<ForkOutlined />}
+                    onClick={handleFork}
+                    disabled={!inputValue.trim()}
+                  />
+                </Tooltip>
+                <Tooltip title="Spawn Subtask">
+                  <Button
+                    icon={<BranchesOutlined />}
+                    onClick={handleSubtask}
+                    disabled={!inputValue.trim()}
+                  />
+                </Tooltip>
                 <Button
-                  icon={<ForkOutlined />}
-                  onClick={handleFork}
+                  type="primary"
+                  icon={<SendOutlined />}
+                  onClick={handleSendPrompt}
                   disabled={!inputValue.trim()}
                 />
-              </Tooltip>
-              <Tooltip title="Spawn Subtask">
-                <Button
-                  icon={<BranchesOutlined />}
-                  onClick={handleSubtask}
-                  disabled={!inputValue.trim()}
-                />
-              </Tooltip>
-              <Button
-                type="primary"
-                icon={<SendOutlined />}
-                onClick={handleSendPrompt}
-                disabled={!inputValue.trim()}
-              />
-            </Button.Group>
+              </Button.Group>
+            </Space>
           </Space>
         </Space>
       </div>
