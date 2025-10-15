@@ -184,6 +184,7 @@ export interface UpdateMCPServerInput {
   args?: string[];
   url?: string;
   env?: Record<string, string>;
+  scope?: MCPScope;
   enabled?: boolean;
 }
 

@@ -15,6 +15,7 @@ import type {
   PreToolUseHookInput,
 } from '@anthropic-ai/claude-agent-sdk/sdkTypes';
 import { generateId } from '../../db/ids';
+import type { MCPServerRepository } from '../../db/repositories/mcp-servers';
 import type { MessagesRepository } from '../../db/repositories/messages';
 import type { SessionMCPServerRepository } from '../../db/repositories/session-mcp-servers';
 import type { SessionRepository } from '../../db/repositories/sessions';
@@ -85,6 +86,7 @@ export class ClaudePromptService {
     private sessionsRepo: SessionRepository,
     private apiKey?: string,
     private sessionMCPRepo?: SessionMCPServerRepository,
+    private mcpServerRepo?: MCPServerRepository,
     private permissionService?: PermissionService,
     private tasksService?: TasksService,
     private sessionsService?: SessionsService // FeathersJS Sessions service for WebSocket broadcasting
@@ -452,21 +454,85 @@ export class ClaudePromptService {
       );
     }
 
-    // Fetch and configure MCP servers for this session
-    if (this.sessionMCPRepo) {
+    // Fetch and configure MCP servers for this session (hierarchical scoping)
+    if (this.sessionMCPRepo && this.mcpServerRepo) {
       try {
-        const mcpServers = await this.sessionMCPRepo.listServers(sessionId, true); // enabledOnly
-        if (mcpServers.length > 0) {
-          console.log(
-            `🔌 Found ${mcpServers.length} enabled MCP server(s) for session ${sessionId}`
-          );
+        const allServers: Array<{
+          // biome-ignore lint/suspicious/noExplicitAny: MCPServer type from multiple sources
+          server: any;
+          source: string;
+        }> = [];
 
+        // 1. Global servers (always included)
+        console.log('🔌 Fetching MCP servers with hierarchical scoping...');
+        const globalServers = await this.mcpServerRepo.findAll({
+          scope: 'global',
+          enabled: true,
+        });
+        console.log(`   📍 Global scope: ${globalServers.length} server(s)`);
+        for (const server of globalServers) {
+          allServers.push({ server, source: 'global' });
+        }
+
+        // 2. Repo-scoped servers (if session has a repo)
+        if (session.repo_id) {
+          const repoServers = await this.mcpServerRepo.findAll({
+            scope: 'repo',
+            scopeId: session.repo_id,
+            enabled: true,
+          });
+          console.log(`   📍 Repo scope: ${repoServers.length} server(s)`);
+          for (const server of repoServers) {
+            allServers.push({ server, source: 'repo' });
+          }
+        }
+
+        // 3. Team-scoped servers (if session has a team - future feature)
+        // if (session.team_id) {
+        //   const teamServers = await this.mcpServerRepo.findAll({
+        //     scope: 'team',
+        //     scopeId: session.team_id,
+        //     enabled: true,
+        //   });
+        //   console.log(`   📍 Team scope: ${teamServers.length} server(s)`);
+        //   for (const server of teamServers) {
+        //     allServers.push({ server, source: 'team' });
+        //   }
+        // }
+
+        // 4. Session-specific servers (from join table)
+        const sessionServers = await this.sessionMCPRepo.listServers(sessionId, true); // enabledOnly
+        console.log(`   📍 Session scope: ${sessionServers.length} server(s)`);
+        for (const server of sessionServers) {
+          allServers.push({ server, source: 'session' });
+        }
+
+        // 5. Deduplicate by server ID (later scopes override earlier ones)
+        // This means: session > team > repo > global
+        const serverMap = new Map<
+          string,
+          {
+            // biome-ignore lint/suspicious/noExplicitAny: MCPServer type from multiple sources
+            server: any;
+            source: string;
+          }
+        >();
+        for (const item of allServers) {
+          serverMap.set(item.server.mcp_server_id, item);
+        }
+        const uniqueServers = Array.from(serverMap.values());
+
+        console.log(
+          `   ✅ Total: ${uniqueServers.length} unique MCP server(s) after deduplication`
+        );
+
+        if (uniqueServers.length > 0) {
           // Convert to SDK format
           const mcpConfig: MCPServersConfig = {};
           const allowedTools: string[] = [];
 
-          for (const server of mcpServers) {
-            console.log(`   - ${server.name} (${server.transport})`);
+          for (const { server, source } of uniqueServers) {
+            console.log(`   - ${server.name} (${server.transport}) [${source}]`);
 
             // Build server config
             const serverConfig: {

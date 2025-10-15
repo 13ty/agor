@@ -9,6 +9,7 @@ import 'dotenv/config';
 import { loadConfig } from '@agor/core/config';
 import {
   createDatabase,
+  MCPServerRepository,
   MessagesRepository,
   SessionMCPServerRepository,
   SessionRepository,
@@ -394,6 +395,7 @@ async function main() {
   const messagesRepo = new MessagesRepository(db);
   const sessionsRepo = new SessionRepository(db);
   const sessionMCPRepo = new SessionMCPServerRepository(db);
+  const mcpServerRepo = new MCPServerRepository(db);
   const tasksRepo = new TaskRepository(db);
 
   // Initialize PermissionService for UI-based permission prompts
@@ -412,6 +414,7 @@ async function main() {
     apiKey,
     app.service('messages'),
     sessionMCPRepo,
+    mcpServerRepo,
     permissionService,
     app.service('tasks'), // Use service instead of repo for WebSocket events
     app.service('sessions') // Sessions service for permission persistence (WebSocket broadcast)

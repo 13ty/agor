@@ -27,6 +27,119 @@ interface MCPServersTableProps {
   onDelete?: (serverId: string) => void;
 }
 
+interface MCPServerFormFieldsProps {
+  mode: 'create' | 'edit';
+  transport?: 'stdio' | 'http' | 'sse';
+  onTransportChange?: (transport: 'stdio' | 'http' | 'sse') => void;
+}
+
+const MCPServerFormFields: React.FC<MCPServerFormFieldsProps> = ({
+  mode,
+  transport,
+  onTransportChange,
+}) => {
+  return (
+    <>
+      {mode === 'create' && (
+        <>
+          <Form.Item
+            label="Name"
+            name="name"
+            rules={[{ required: true, message: 'Please enter a server name' }]}
+            tooltip="Internal identifier (e.g., filesystem, sentry)"
+          >
+            <Input placeholder="filesystem" />
+          </Form.Item>
+
+          <Form.Item
+            label="Display Name"
+            name="display_name"
+            tooltip="User-friendly name shown in UI"
+          >
+            <Input placeholder="Filesystem Access" />
+          </Form.Item>
+        </>
+      )}
+
+      {mode === 'edit' && (
+        <Form.Item label="Display Name" name="display_name">
+          <Input placeholder="Filesystem Access" />
+        </Form.Item>
+      )}
+
+      <Form.Item label="Description" name="description">
+        <TextArea placeholder="Optional description..." rows={2} />
+      </Form.Item>
+
+      {mode === 'create' && (
+        <Form.Item
+          label="Transport"
+          name="transport"
+          rules={[{ required: true }]}
+          initialValue="stdio"
+        >
+          <Select onChange={value => onTransportChange?.(value as 'stdio' | 'http' | 'sse')}>
+            <Select.Option value="stdio">stdio (Local process)</Select.Option>
+            <Select.Option value="http">HTTP</Select.Option>
+            <Select.Option value="sse">SSE (Server-Sent Events)</Select.Option>
+          </Select>
+        </Form.Item>
+      )}
+
+      {(mode === 'create' ? transport === 'stdio' : transport === 'stdio') ? (
+        <>
+          <Form.Item
+            label="Command"
+            name="command"
+            rules={mode === 'create' ? [{ required: true, message: 'Please enter a command' }] : []}
+            tooltip="Command to execute (e.g., npx, node, python)"
+          >
+            <Input placeholder="npx" />
+          </Form.Item>
+
+          <Form.Item label="Arguments" name="args" tooltip="Comma-separated arguments">
+            <Input placeholder="@modelcontextprotocol/server-filesystem, /allowed/path" />
+          </Form.Item>
+        </>
+      ) : (
+        <Form.Item
+          label="URL"
+          name="url"
+          rules={mode === 'create' ? [{ required: true, message: 'Please enter a URL' }] : []}
+        >
+          <Input placeholder="https://mcp.example.com" />
+        </Form.Item>
+      )}
+
+      <Form.Item
+        label="Scope"
+        name="scope"
+        initialValue="global"
+        tooltip="Where this server is available"
+      >
+        <Select>
+          <Select.Option value="global">Global (all sessions)</Select.Option>
+          <Select.Option value="team">Team</Select.Option>
+          <Select.Option value="repo">Repository</Select.Option>
+          <Select.Option value="session">Session</Select.Option>
+        </Select>
+      </Form.Item>
+
+      <Form.Item
+        label="Environment Variables"
+        name="env"
+        tooltip="JSON object of environment variables"
+      >
+        <TextArea placeholder='{"API_KEY": "xxx", "ALLOWED_PATHS": "/path"}' rows={3} />
+      </Form.Item>
+
+      <Form.Item label="Enabled" name="enabled" valuePropName="checked" initialValue={true}>
+        <Switch />
+      </Form.Item>
+    </>
+  );
+};
+
 export const MCPServersTable: React.FC<MCPServersTableProps> = ({
   mcpServers,
   onCreate,
@@ -85,6 +198,7 @@ export const MCPServersTable: React.FC<MCPServersTableProps> = ({
       command: server.command,
       args: server.args?.join(', '),
       url: server.url,
+      scope: server.scope,
       enabled: server.enabled,
       env: server.env ? JSON.stringify(server.env, null, 2) : undefined,
     });
@@ -98,6 +212,7 @@ export const MCPServersTable: React.FC<MCPServersTableProps> = ({
       const updates: UpdateMCPServerInput = {
         display_name: values.display_name,
         description: values.description,
+        scope: values.scope,
         enabled: values.enabled,
       };
 
@@ -257,90 +372,11 @@ export const MCPServersTable: React.FC<MCPServersTableProps> = ({
         width={600}
       >
         <Form form={form} layout="vertical" style={{ marginTop: 16 }}>
-          <Form.Item
-            label="Name"
-            name="name"
-            rules={[{ required: true, message: 'Please enter a server name' }]}
-            tooltip="Internal identifier (e.g., filesystem, sentry)"
-          >
-            <Input placeholder="filesystem" />
-          </Form.Item>
-
-          <Form.Item
-            label="Display Name"
-            name="display_name"
-            tooltip="User-friendly name shown in UI"
-          >
-            <Input placeholder="Filesystem Access" />
-          </Form.Item>
-
-          <Form.Item label="Description" name="description">
-            <TextArea placeholder="Optional description..." rows={2} />
-          </Form.Item>
-
-          <Form.Item
-            label="Transport"
-            name="transport"
-            rules={[{ required: true }]}
-            initialValue="stdio"
-          >
-            <Select onChange={value => setTransport(value as 'stdio' | 'http' | 'sse')}>
-              <Select.Option value="stdio">stdio (Local process)</Select.Option>
-              <Select.Option value="http">HTTP</Select.Option>
-              <Select.Option value="sse">SSE (Server-Sent Events)</Select.Option>
-            </Select>
-          </Form.Item>
-
-          {transport === 'stdio' ? (
-            <>
-              <Form.Item
-                label="Command"
-                name="command"
-                rules={[{ required: true, message: 'Please enter a command' }]}
-                tooltip="Command to execute (e.g., npx, node, python)"
-              >
-                <Input placeholder="npx" />
-              </Form.Item>
-
-              <Form.Item label="Arguments" name="args" tooltip="Comma-separated arguments">
-                <Input placeholder="@modelcontextprotocol/server-filesystem, /allowed/path" />
-              </Form.Item>
-            </>
-          ) : (
-            <Form.Item
-              label="URL"
-              name="url"
-              rules={[{ required: true, message: 'Please enter a URL' }]}
-            >
-              <Input placeholder="https://mcp.example.com" />
-            </Form.Item>
-          )}
-
-          <Form.Item
-            label="Scope"
-            name="scope"
-            initialValue="global"
-            tooltip="Where this server is available"
-          >
-            <Select>
-              <Select.Option value="global">Global (all sessions)</Select.Option>
-              <Select.Option value="team">Team</Select.Option>
-              <Select.Option value="repo">Repository</Select.Option>
-              <Select.Option value="session">Session</Select.Option>
-            </Select>
-          </Form.Item>
-
-          <Form.Item
-            label="Environment Variables"
-            name="env"
-            tooltip="JSON object of environment variables"
-          >
-            <TextArea placeholder='{"API_KEY": "xxx", "ALLOWED_PATHS": "/path"}' rows={3} />
-          </Form.Item>
-
-          <Form.Item label="Enabled" name="enabled" valuePropName="checked" initialValue={true}>
-            <Switch />
-          </Form.Item>
+          <MCPServerFormFields
+            mode="create"
+            transport={transport}
+            onTransportChange={setTransport}
+          />
         </Form>
       </Modal>
 
@@ -358,41 +394,7 @@ export const MCPServersTable: React.FC<MCPServersTableProps> = ({
         width={600}
       >
         <Form form={form} layout="vertical" style={{ marginTop: 16 }}>
-          <Form.Item label="Display Name" name="display_name">
-            <Input placeholder="Filesystem Access" />
-          </Form.Item>
-
-          <Form.Item label="Description" name="description">
-            <TextArea placeholder="Optional description..." rows={2} />
-          </Form.Item>
-
-          {editingServer?.transport === 'stdio' ? (
-            <>
-              <Form.Item label="Command" name="command">
-                <Input placeholder="npx" />
-              </Form.Item>
-
-              <Form.Item label="Arguments" name="args" tooltip="Comma-separated arguments">
-                <Input placeholder="@modelcontextprotocol/server-filesystem, /allowed/path" />
-              </Form.Item>
-            </>
-          ) : (
-            <Form.Item label="URL" name="url">
-              <Input placeholder="https://mcp.example.com" />
-            </Form.Item>
-          )}
-
-          <Form.Item
-            label="Environment Variables"
-            name="env"
-            tooltip="JSON object of environment variables"
-          >
-            <TextArea placeholder='{"API_KEY": "xxx", "ALLOWED_PATHS": "/path"}' rows={3} />
-          </Form.Item>
-
-          <Form.Item label="Enabled" name="enabled" valuePropName="checked">
-            <Switch />
-          </Form.Item>
+          <MCPServerFormFields mode="edit" transport={editingServer?.transport} />
         </Form>
       </Modal>
 

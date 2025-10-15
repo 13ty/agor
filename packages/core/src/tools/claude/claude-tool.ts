@@ -12,6 +12,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import type { PermissionMode } from '@anthropic-ai/claude-agent-sdk';
 import { generateId } from '../../db/ids';
+import type { MCPServerRepository } from '../../db/repositories/mcp-servers';
 import type { MessagesRepository } from '../../db/repositories/messages';
 import type { SessionMCPServerRepository } from '../../db/repositories/session-mcp-servers';
 import type { SessionRepository } from '../../db/repositories/sessions';
@@ -64,6 +65,7 @@ export class ClaudeTool implements ITool {
     private apiKey?: string,
     private messagesService?: MessagesService,
     private sessionMCPRepo?: SessionMCPServerRepository,
+    private mcpServerRepo?: MCPServerRepository,
     private permissionService?: PermissionService,
     private tasksService?: TasksService,
     private sessionsService?: SessionsService
@@ -74,6 +76,7 @@ export class ClaudeTool implements ITool {
         sessionsRepo,
         apiKey,
         sessionMCPRepo,
+        mcpServerRepo,
         permissionService,
         tasksService,
         sessionsService
