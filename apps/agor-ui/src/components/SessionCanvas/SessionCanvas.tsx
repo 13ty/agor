@@ -1,5 +1,5 @@
 import type { AgorClient } from '@agor/core/api';
-import type { MCPServer, User } from '@agor/core/types';
+import type { BoardID, MCPServer, User } from '@agor/core/types';
 import { BorderOutlined, DeleteOutlined, SelectOutlined } from '@ant-design/icons';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -12,14 +12,18 @@ import {
   type Node,
   type NodeDragHandler,
   ReactFlow,
+  type ReactFlowInstance,
   useEdgesState,
   useNodesState,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import './SessionCanvas.css';
+import { useCursorTracking } from '../../hooks/useCursorTracking';
+import { usePresence } from '../../hooks/usePresence';
 import type { Board, BoardObject, Session, Task } from '../../types';
 import SessionCard from '../SessionCard';
 import { ZoneNode } from './canvas/BoardObjectNodes';
+import { CursorNode } from './canvas/CursorNode';
 import { useBoardObjects } from './canvas/useBoardObjects';
 
 interface SessionCanvasProps {
@@ -74,6 +78,7 @@ const SessionNode = ({ data }: { data: SessionNodeData }) => {
 const nodeTypes = {
   sessionNode: SessionNode,
   zone: ZoneNode,
+  cursor: CursorNode,
 };
 
 const SessionCanvas = ({
@@ -246,16 +251,61 @@ const SessionCanvas = ({
     return edges;
   }, [sessions]);
 
-  // Sync nodes when sessions/tasks/board objects change
+  // Store ReactFlow instance ref
+  const reactFlowInstanceRef = useRef<ReactFlowInstance | null>(null);
+
+  // Cursor tracking hook
+  useCursorTracking({
+    client,
+    boardId: board?.board_id as BoardID | null,
+    reactFlowInstance: reactFlowInstanceRef.current,
+    enabled: !!board && !!client,
+  });
+
+  // Presence tracking hook (get remote cursors)
+  const { remoteCursors } = usePresence({
+    client,
+    boardId: board?.board_id as BoardID | null,
+    users,
+    enabled: !!board && !!client,
+  });
+
+  // Create cursor nodes from remote cursors (for minimap visibility)
+  // Large dimensions ensure good visibility in minimap (visual size controlled by inverse scaling)
+  const cursorNodes: Node[] = useMemo(() => {
+    const nodes: Node[] = [];
+
+    for (const [userId, { x, y, user }] of remoteCursors.entries()) {
+      nodes.push({
+        id: `cursor-${userId}`,
+        type: 'cursor',
+        position: { x, y },
+        draggable: false,
+        selectable: false,
+        focusable: false,
+        data: { user },
+        width: 150,
+        height: 150,
+        style: {
+          pointerEvents: 'none',
+          transition: 'transform 0.1s ease-out',
+        },
+      });
+    }
+
+    return nodes;
+  }, [remoteCursors]);
+
+  // Sync nodes when sessions/tasks/board objects/cursors change
   useEffect(() => {
     if (isDraggingRef.current) return; // Skip during drag
 
     // Set syncing flag to prevent resize events from triggering during sync
     isSyncingRef.current = true;
 
-    // Merge session nodes + board object nodes
+    // Merge session nodes + board object nodes + cursor nodes
     const boardObjectNodes = getBoardObjectNodes();
-    const allNodes = [...initialNodes, ...boardObjectNodes];
+    const allNodes = [...initialNodes, ...boardObjectNodes, ...cursorNodes];
 
     setNodes(currentNodes => {
       return allNodes
@@ -295,7 +345,7 @@ const SessionCanvas = ({
     setTimeout(() => {
       isSyncingRef.current = false;
     }, 100);
-  }, [initialNodes, getBoardObjectNodes, setNodes]);
+  }, [initialNodes, getBoardObjectNodes, cursorNodes, setNodes]);
 
   // Sync edges
   useEffect(() => {
@@ -460,12 +510,6 @@ const SessionCanvas = ({
     };
   }, []);
 
-  // Store ReactFlow instance ref
-  const reactFlowInstanceRef = useRef<{
-    screenToFlowPosition: (pos: { x: number; y: number }) => { x: number; y: number };
-    getViewport: () => { zoom: number; x: number; y: number };
-  } | null>(null);
-
   // Canvas pointer handlers for drag-to-draw zones
   const handlePointerDown = useCallback(
     (event: React.PointerEvent) => {
@@ -583,14 +627,14 @@ const SessionCanvas = ({
   const handleNodeClick = useCallback(
     (event: React.MouseEvent, node: Node) => {
       if (activeTool === 'eraser') {
-        // Only delete board objects (zones), not sessions
+        // Only delete board objects (zones), not sessions or cursors
         if (node.type === 'zone') {
           deleteObject(node.id);
         }
         return;
       }
 
-      // Normal session click
+      // Normal session click (ignore cursor nodes)
       if (node.type === 'sessionNode') {
         onSessionClick?.(node.id);
       }
@@ -651,6 +695,7 @@ const SessionCanvas = ({
           }}
         />
       )}
+
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -673,7 +718,6 @@ const SessionCanvas = ({
         nodesConnectable={false}
         elementsSelectable={true}
         panOnDrag={activeTool === 'select'}
-        colorMode="dark"
         className={`dark tool-mode-${activeTool}`}
       >
         <Background />
@@ -720,6 +764,9 @@ const SessionCanvas = ({
         </Controls>
         <MiniMap
           nodeColor={node => {
+            // Handle cursor nodes (show as bright color)
+            if (node.type === 'cursor') return '#faad14';
+
             // Handle board objects (zones)
             if (node.type === 'zone') return '#d9d9d9';
 

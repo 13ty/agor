@@ -1,4 +1,4 @@
-import type { User } from '@agor/core/types';
+import type { ActiveUser, User } from '@agor/core/types';
 import {
   GithubOutlined,
   LogoutOutlined,
@@ -8,12 +8,15 @@ import {
 } from '@ant-design/icons';
 import type { MenuProps } from 'antd';
 import { Button, Dropdown, Layout, Space, Typography } from 'antd';
+import { Facepile } from '../Facepile';
 
 const { Header } = Layout;
 const { Title, Text } = Typography;
 
 export interface AppHeaderProps {
   user?: User | null;
+  activeUsers?: ActiveUser[];
+  currentUserId?: string;
   onMenuClick?: () => void;
   onSettingsClick?: () => void;
   onLogout?: () => void;
@@ -23,6 +26,8 @@ export interface AppHeaderProps {
 
 export const AppHeader: React.FC<AppHeaderProps> = ({
   user,
+  activeUsers = [],
+  currentUserId,
   onMenuClick,
   onSettingsClick,
   onLogout,
@@ -107,6 +112,17 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
       </Space>
 
       <Space>
+        {activeUsers.length > 0 && (
+          <Facepile
+            activeUsers={activeUsers}
+            currentUserId={currentUserId}
+            maxVisible={5}
+            size={28}
+            style={{
+              marginRight: 8,
+            }}
+          />
+        )}
         <Button
           type="text"
           icon={<GithubOutlined />}

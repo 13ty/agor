@@ -1,7 +1,15 @@
 import type { AgorClient } from '@agor/core/api';
-import type { CreateUserInput, MCPServer, Repo, UpdateUserInput, User } from '@agor/core/types';
+import type {
+  BoardID,
+  CreateUserInput,
+  MCPServer,
+  Repo,
+  UpdateUserInput,
+  User,
+} from '@agor/core/types';
 import { Layout } from 'antd';
 import { useState } from 'react';
+import { usePresence } from '../../hooks/usePresence';
 import type { Agent, Board, Session, Task } from '../../types';
 import { AppHeader } from '../AppHeader';
 import type { ModelConfig } from '../ModelSelector';
@@ -121,8 +129,11 @@ export const App: React.FC<AppProps> = ({
     permissionMode?: import('../SessionDrawer').PermissionMode
   ) => {
     if (selectedSessionId) {
+      const session = sessions.find(s => s.session_id === selectedSessionId);
+      const agentName = session?.agent || 'agent';
+
       // Show loading state
-      console.log('Sending prompt to Claude...', {
+      console.log(`Sending prompt to ${agentName}...`, {
         sessionId: selectedSessionId,
         prompt,
         permissionMode,
@@ -198,10 +209,32 @@ export const App: React.FC<AppProps> = ({
     currentBoard?.sessions.includes(session.session_id)
   );
 
+  // Track active users via cursor presence
+  const { activeUsers } = usePresence({
+    client,
+    boardId: currentBoard?.board_id as BoardID | null,
+    users,
+    enabled: !!currentBoard && !!client,
+  });
+
+  // Include current user in the facepile (always first)
+  const allActiveUsers = user
+    ? [
+        {
+          user,
+          lastSeen: Date.now(),
+          cursor: undefined, // Current user doesn't have a remote cursor
+        },
+        ...activeUsers,
+      ]
+    : activeUsers;
+
   return (
     <Layout style={{ height: '100vh' }}>
       <AppHeader
         user={user}
+        activeUsers={allActiveUsers}
+        currentUserId={user?.user_id}
         onMenuClick={() => setListDrawerOpen(true)}
         onSettingsClick={() => setSettingsOpen(true)}
         onLogout={onLogout}
@@ -253,6 +286,7 @@ export const App: React.FC<AppProps> = ({
         onOpenSettings={sessionId => {
           setSessionSettingsId(sessionId);
         }}
+        onUpdateSession={onUpdateSession}
       />
       <SessionListDrawer
         open={listDrawerOpen}
@@ -266,6 +300,7 @@ export const App: React.FC<AppProps> = ({
       <SettingsModal
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
+        client={client}
         boards={boards}
         repos={repos}
         users={users}

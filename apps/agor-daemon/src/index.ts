@@ -6,6 +6,8 @@
  */
 
 import 'dotenv/config';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { loadConfig } from '@agor/core/config';
 import {
   createDatabase,
@@ -17,8 +19,8 @@ import {
   TaskRepository,
 } from '@agor/core/db';
 import { type PermissionDecision, PermissionService } from '@agor/core/permissions';
-import { ClaudeTool } from '@agor/core/tools';
-import type { SessionID } from '@agor/core/types';
+import { ClaudeTool, CodexTool } from '@agor/core/tools';
+import type { SessionID, User } from '@agor/core/types';
 import type { PermissionMode } from '@anthropic-ai/claude-agent-sdk';
 import { AuthenticationService, JWTStrategy } from '@feathersjs/authentication';
 import { LocalStrategy } from '@feathersjs/authentication-local';
@@ -29,7 +31,9 @@ import socketio from '@feathersjs/socketio';
 import cors from 'cors';
 import express from 'express';
 import jwt from 'jsonwebtoken';
+import type { Socket } from 'socket.io';
 import { createBoardsService } from './services/boards';
+import { createContextService } from './services/context';
 import { createMCPServersService } from './services/mcp-servers';
 import { createMessagesService } from './services/messages';
 import { createReposService } from './services/repos';
@@ -45,6 +49,15 @@ import { AnonymousStrategy } from './strategies/anonymous';
 interface RouteParams extends Params {
   route?: {
     id?: string;
+  };
+}
+
+/**
+ * FeathersJS extends Socket.io socket with authentication context
+ */
+interface FeathersSocket extends Socket {
+  feathers?: {
+    user?: User;
   };
 }
 
@@ -86,13 +99,68 @@ async function main() {
   // Configure REST and Socket.io with CORS
   app.configure(rest());
   app.configure(
-    socketio({
-      cors: {
-        origin: 'http://localhost:5173',
-        methods: ['GET', 'POST', 'PATCH', 'DELETE'],
-        credentials: true,
+    socketio(
+      {
+        cors: {
+          origin: 'http://localhost:5173',
+          methods: ['GET', 'POST', 'PATCH', 'DELETE'],
+          credentials: true,
+        },
       },
-    })
+      io => {
+        // Configure Socket.io for cursor presence events
+        io.on('connection', socket => {
+          console.log('🔌 Socket.io connection established:', socket.id);
+
+          // Helper to get user ID from socket's Feathers connection
+          const getUserId = () => {
+            // In FeathersJS, the authenticated user is stored in socket.feathers
+            const user = (socket as FeathersSocket).feathers?.user;
+            return user?.user_id || 'anonymous';
+          };
+
+          // Handle cursor movement events
+          socket.on('cursor-move', (data: import('@agor/core/types').CursorMoveEvent) => {
+            const userId = getUserId();
+            console.log('📥 Daemon received cursor-move:', {
+              socketId: socket.id,
+              userId,
+              boardId: data.boardId,
+              x: data.x,
+              y: data.y,
+            });
+
+            // Broadcast cursor position to all users on the same board except sender
+            const broadcastData = {
+              userId,
+              boardId: data.boardId,
+              x: data.x,
+              y: data.y,
+              timestamp: data.timestamp,
+            } as import('@agor/core/types').CursorMovedEvent;
+
+            console.log('📤 Daemon broadcasting cursor-moved:', broadcastData);
+            socket.broadcast.emit('cursor-moved', broadcastData);
+          });
+
+          // Handle cursor leave events (user navigates away from board)
+          socket.on('cursor-leave', (data: import('@agor/core/types').CursorLeaveEvent) => {
+            const userId = getUserId();
+            console.log('📥 Daemon received cursor-leave:', {
+              socketId: socket.id,
+              userId,
+              boardId: data.boardId,
+            });
+
+            socket.broadcast.emit('cursor-left', {
+              userId,
+              boardId: data.boardId,
+              timestamp: Date.now(),
+            });
+          });
+        });
+      }
+    )
   );
 
   // Configure channels to broadcast events to all connected clients
@@ -123,6 +191,15 @@ async function main() {
   app.use('/boards', createBoardsService(db));
   app.use('/repos', createReposService(db));
   app.use('/mcp-servers', createMCPServersService(db));
+
+  // Register context service (read-only filesystem browser)
+  // Scans context/ folder for all .md files
+  // Currently: <project-root>/context/
+  // Future: May move to ~/.agor/context/
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = dirname(__filename);
+  const contextPath = resolve(__dirname, '../../..', 'context');
+  app.use('/context', createContextService(contextPath));
 
   // Register session-mcp-servers as a top-level service for WebSocket events
   // This is needed for real-time updates when MCP servers are added/removed from sessions
@@ -420,6 +497,22 @@ async function main() {
     app.service('sessions') // Sessions service for permission persistence (WebSocket broadcast)
   );
 
+  // Initialize CodexTool (uses OPENAI_API_KEY from environment)
+  const openaiApiKey = config.credentials?.OPENAI_API_KEY || process.env.OPENAI_API_KEY;
+  const codexTool = new CodexTool(
+    messagesRepo,
+    sessionsRepo,
+    openaiApiKey,
+    app.service('messages'),
+    app.service('tasks')
+  );
+
+  if (!openaiApiKey) {
+    console.warn('⚠️  No OPENAI_API_KEY found - Codex sessions will fail');
+    console.warn('   Run: agor config set credentials.OPENAI_API_KEY <your-key>');
+    console.warn('   Or set OPENAI_API_KEY environment variable');
+  }
+
   // Configure custom route for bulk message creation
   app.use('/messages/bulk', {
     async create(data: unknown[]) {
@@ -463,9 +556,9 @@ async function main() {
       data: { prompt: string; permissionMode?: PermissionMode; stream?: boolean },
       params: RouteParams
     ) {
-      console.debug(
-        `📨 [${new Date().toISOString()}] Prompt request for session ${params.route?.id?.substring(0, 8)}`
-      );
+      console.log(`📨 [Daemon] Prompt request for session ${params.route?.id?.substring(0, 8)}`);
+      console.log(`   Permission mode: ${data.permissionMode || 'not specified'}`);
+      console.log(`   Streaming: ${data.stream !== false}`);
 
       const id = params.route?.id;
       if (!id) throw new Error('Session ID required');
@@ -473,6 +566,10 @@ async function main() {
 
       // Get session to find current message count
       const session = await sessionsService.get(id, params);
+      console.log(`   Session agent: ${session.agent}`);
+      console.log(
+        `   Session permission_config.mode: ${session.permission_config?.mode || 'not set'}`
+      );
       const messageStartIndex = session.message_count;
       const startTimestamp = new Date().toISOString();
 
@@ -545,20 +642,45 @@ async function main() {
       // This ensures WebSocket events flush immediately, not batched with request
       const useStreaming = data.stream !== false; // Default to true
       setImmediate(() => {
-        const executeMethod = useStreaming
-          ? claudeTool.executePromptWithStreaming(
-              id as SessionID,
-              data.prompt,
-              task.task_id,
-              data.permissionMode,
-              streamingCallbacks
-            )
-          : claudeTool.executePrompt(
-              id as SessionID,
-              data.prompt,
-              task.task_id,
-              data.permissionMode
-            );
+        // Route to appropriate tool based on session agent
+        let executeMethod: Promise<{
+          userMessageId: import('@agor/core/types').MessageID;
+          assistantMessageIds: import('@agor/core/types').MessageID[];
+        }>;
+
+        if (session.agent === 'codex') {
+          // Use CodexTool for Codex sessions
+          executeMethod = useStreaming
+            ? codexTool.executePromptWithStreaming(
+                id as SessionID,
+                data.prompt,
+                task.task_id,
+                data.permissionMode,
+                streamingCallbacks
+              )
+            : codexTool.executePrompt(
+                id as SessionID,
+                data.prompt,
+                task.task_id,
+                data.permissionMode
+              );
+        } else {
+          // Use ClaudeTool for Claude Code sessions (default)
+          executeMethod = useStreaming
+            ? claudeTool.executePromptWithStreaming(
+                id as SessionID,
+                data.prompt,
+                task.task_id,
+                data.permissionMode,
+                streamingCallbacks
+              )
+            : claudeTool.executePrompt(
+                id as SessionID,
+                data.prompt,
+                task.task_id,
+                data.permissionMode
+              );
+        }
 
         executeMethod
           .then(async result => {
@@ -859,6 +981,7 @@ async function main() {
     console.log(`     - /boards`);
     console.log(`     - /repos`);
     console.log(`     - /mcp-servers`);
+    console.log(`     - /context`);
     console.log(`     - /users`);
   });
 
