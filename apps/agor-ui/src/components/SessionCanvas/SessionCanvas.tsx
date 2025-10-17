@@ -1,6 +1,7 @@
 import type { AgorClient } from '@agor/core/api';
-import type { BoardID, MCPServer, User } from '@agor/core/types';
+import type { BoardID, MCPServer, User, ZoneTrigger } from '@agor/core/types';
 import { BorderOutlined, DeleteOutlined, SelectOutlined } from '@ant-design/icons';
+import { Modal, Typography } from 'antd';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Background,
@@ -25,6 +26,8 @@ import SessionCard from '../SessionCard';
 import { ZoneNode } from './canvas/BoardObjectNodes';
 import { CursorNode } from './canvas/CursorNode';
 import { useBoardObjects } from './canvas/useBoardObjects';
+
+const { Text, Paragraph } = Typography;
 
 interface SessionCanvasProps {
   board: Board | null;
@@ -113,6 +116,14 @@ const SessionCanvas = ({
   const [drawingZone, setDrawingZone] = useState<{
     start: { x: number; y: number };
     end: { x: number; y: number };
+  } | null>(null);
+
+  // Trigger confirmation modal state
+  const [triggerModal, setTriggerModal] = useState<{
+    sessionId: string;
+    zoneName: string;
+    trigger: ZoneTrigger;
+    pinData: { x: number; y: number; parentId: string };
   } | null>(null);
 
   // Debounce timer ref for position updates
@@ -605,13 +616,17 @@ const SessionCanvas = ({
               const overlappingZone = intersections?.find(n => n.type === 'zone');
 
               if (overlappingZone && !currentParentId) {
-                // Session dropped into a zone → PIN IT
-                // Convert absolute position to relative (to zone's top-left)
+                // Session dropped into a zone → Check for trigger, then PIN IT
                 const zoneNode = currentNodes.find(n => n.id === overlappingZone.id);
                 if (zoneNode) {
                   const relativeX = position.x - zoneNode.position.x;
                   const relativeY = position.y - zoneNode.position.y;
 
+                  // Check if zone has a trigger configured
+                  const zoneObject = board.objects?.[overlappingZone.id];
+                  const zoneTrigger = zoneObject?.type === 'zone' ? zoneObject.trigger : undefined;
+
+                  // Pin the session (always pin, trigger execution is optional)
                   sessionUpdates[nodeId] = {
                     x: relativeX,
                     y: relativeY,
@@ -620,6 +635,27 @@ const SessionCanvas = ({
                   console.log(
                     `📌 Pinned session ${nodeId.substring(0, 8)} to zone ${overlappingZone.id.substring(0, 8)}`
                   );
+
+                  // If zone has a trigger, show confirmation modal AFTER pinning
+                  if (zoneTrigger) {
+                    const zoneName = zoneObject.label || 'Unknown Zone';
+                    // Use setTimeout to show modal after the layout update completes
+                    setTimeout(() => {
+                      setTriggerModal({
+                        sessionId: nodeId,
+                        zoneName,
+                        trigger: zoneTrigger,
+                        pinData: {
+                          x: relativeX,
+                          y: relativeY,
+                          parentId: overlappingZone.id,
+                        },
+                      });
+                    }, 600); // Wait for debounce to complete
+                    console.log(
+                      `🎯 Zone ${overlappingZone.id.substring(0, 8)} has trigger - will show confirmation modal after pin`
+                    );
+                  }
                 }
               } else if (!overlappingZone && currentParentId) {
                 // Session dragged outside zone → UNPIN IT
@@ -968,6 +1004,82 @@ const SessionCanvas = ({
           zoomable
         />
       </ReactFlow>
+
+      {/* Trigger confirmation modal */}
+      {triggerModal && (
+        <Modal
+          title={`Execute Trigger for "${triggerModal.zoneName}"?`}
+          open={true}
+          onOk={async () => {
+            if (!client) {
+              console.error('❌ Cannot execute trigger: client not available');
+              setTriggerModal(null);
+              return;
+            }
+
+            console.log('✅ Execute trigger:', triggerModal.trigger);
+
+            try {
+              const { sessionId, trigger } = triggerModal;
+
+              // All trigger types now use the unified prompt endpoint
+              // This ensures consistent behavior: task creation, agent invocation, streaming, etc.
+              switch (trigger.type) {
+                case 'prompt':
+                case 'task':
+                case 'subtask': {
+                  // Prefix subtasks for clarity
+                  const prompt =
+                    trigger.type === 'subtask' ? `[Subtask] ${trigger.text}` : trigger.text;
+
+                  await client.service(`sessions/${sessionId}/prompt`).create({
+                    prompt,
+                  });
+
+                  console.log(
+                    `✨ ${trigger.type} triggered for session ${sessionId.substring(0, 8)}: ${prompt.substring(0, 50)}...`
+                  );
+                  break;
+                }
+
+                default:
+                  console.warn(`⚠️  Unknown trigger type: ${trigger.type}`);
+              }
+            } catch (error) {
+              console.error('❌ Failed to execute trigger:', error);
+            } finally {
+              setTriggerModal(null);
+            }
+          }}
+          onCancel={() => {
+            console.log('⏭️  Trigger skipped by user');
+            setTriggerModal(null);
+          }}
+          okText="Yes, Execute"
+          cancelText="No, Skip"
+        >
+          <Paragraph>
+            The session has been pinned to <Text strong>{triggerModal.zoneName}</Text>.
+          </Paragraph>
+          <Paragraph>
+            This zone has a <Text strong>{triggerModal.trigger.type}</Text> trigger configured:
+          </Paragraph>
+          <Paragraph
+            code
+            style={{
+              whiteSpace: 'pre-wrap',
+              background: '#1f1f1f',
+              padding: '12px',
+              borderRadius: '4px',
+            }}
+          >
+            {triggerModal.trigger.text}
+          </Paragraph>
+          <Paragraph type="secondary">
+            Would you like to execute this trigger for the session now?
+          </Paragraph>
+        </Modal>
+      )}
     </div>
   );
 };

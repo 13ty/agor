@@ -51,7 +51,7 @@ export class TaskRepository implements BaseRepository<Task, Partial<Task>> {
     return {
       task_id: taskId,
       session_id: task.session_id,
-      created_at: new Date(task.created_at ?? now),
+      created_at: new Date(now), // Always use server timestamp, ignore client-provided value
       completed_at: task.completed_at ? new Date(task.completed_at) : undefined,
       status: task.status ?? 'created',
       created_by: task.created_by ?? 'anonymous',

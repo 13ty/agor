@@ -2,7 +2,15 @@
 import type { SessionID, TaskID } from './id';
 import type { ReportPath, ReportTemplate } from './report';
 
-export type TaskStatus = 'created' | 'running' | 'awaiting_permission' | 'completed' | 'failed';
+export const TaskStatus = {
+  CREATED: 'created',
+  RUNNING: 'running',
+  AWAITING_PERMISSION: 'awaiting_permission',
+  COMPLETED: 'completed',
+  FAILED: 'failed',
+} as const;
+
+export type TaskStatus = (typeof TaskStatus)[keyof typeof TaskStatus];
 
 export interface Task {
   /** Unique task identifier (UUIDv7) */
