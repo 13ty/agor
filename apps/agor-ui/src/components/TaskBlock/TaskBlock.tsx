@@ -221,9 +221,11 @@ export const TaskBlock: React.FC<TaskBlockProps> = ({
                 🤖 {task.model}
               </Text>
             )}
-            {task.git_state.sha_at_end && (
-              <Text type="secondary" style={{ fontSize: 12 }}>
-                <GithubOutlined /> {task.git_state.sha_at_end.substring(0, 7)}
+            {task.git_state.sha_at_start && task.git_state.sha_at_start !== 'unknown' && (
+              <Text type="secondary" style={{ fontSize: 12 }} title="Git SHA at task start">
+                <GithubOutlined />{' '}
+                {task.git_state.sha_at_start.replace('-dirty', '').substring(0, 7)}
+                {task.git_state.sha_at_start.endsWith('-dirty') && ' (dirty)'}
               </Text>
             )}
             {task.report && (

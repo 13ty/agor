@@ -579,6 +579,10 @@ async function main() {
       const messageStartIndex = session.message_count;
       const startTimestamp = new Date().toISOString();
 
+      // Get current git state from session's working directory
+      const { getGitState } = await import('@agor/core/git');
+      const gitStateAtStart = session.repo?.cwd ? await getGitState(session.repo.cwd) : 'unknown';
+
       // PHASE 1: Create task immediately with 'running' status (UI shows task instantly)
       const task = await tasksService.create(
         {
@@ -594,7 +598,7 @@ async function main() {
           },
           tool_use_count: 0, // Will be updated after assistant message
           git_state: {
-            sha_at_start: session.git_state?.current_sha || 'unknown',
+            sha_at_start: gitStateAtStart,
           },
         },
         params

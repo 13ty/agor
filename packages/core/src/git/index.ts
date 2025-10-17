@@ -299,3 +299,37 @@ export async function getRemoteBranches(
   const branches = await git.branch(['-r']);
   return branches.all.filter(b => b.startsWith(`${remote}/`)).map(b => b.replace(`${remote}/`, ''));
 }
+
+/**
+ * Get git state for a repository (SHA + dirty status)
+ *
+ * Returns the current commit SHA with "-dirty" suffix if working directory has uncommitted changes.
+ * If not in a git repo or SHA cannot be determined, returns "unknown".
+ *
+ * Examples:
+ * - "abc123def456" (clean working directory)
+ * - "abc123def456-dirty" (uncommitted changes)
+ * - "unknown" (not a git repo or error)
+ */
+export async function getGitState(repoPath: string): Promise<string> {
+  try {
+    // Check if it's a git repo first
+    if (!(await isGitRepo(repoPath))) {
+      return 'unknown';
+    }
+
+    // Get current SHA
+    const sha = await getCurrentSha(repoPath);
+    if (!sha) {
+      return 'unknown';
+    }
+
+    // Check if working directory is clean
+    const clean = await isClean(repoPath);
+
+    return clean ? sha : `${sha}-dirty`;
+  } catch (error) {
+    console.warn(`Failed to get git state for ${repoPath}:`, error);
+    return 'unknown';
+  }
+}
