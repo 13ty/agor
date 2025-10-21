@@ -3,6 +3,10 @@ set -e
 
 echo "🚀 Starting Agor development environment..."
 
+# Install dependencies (handles platform-specific binaries)
+echo "📦 Installing dependencies..."
+pnpm install --frozen-lockfile || pnpm install
+
 # Initialize database if it doesn't exist
 if [ ! -f /root/.agor/agor.db ]; then
   echo "📦 Initializing database..."
