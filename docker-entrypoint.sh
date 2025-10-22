@@ -24,11 +24,11 @@ if [ ! -f /root/.agor/agor.db ]; then
   }
 
   echo "👤 Creating default admin user..."
-  # Create config with auth enabled
+  # Create config with auth enabled (use DAEMON_PORT env var or default to 3030)
   mkdir -p /root/.agor
   cat > /root/.agor/config.yaml <<EOF
 daemon:
-  port: 3030
+  port: ${DAEMON_PORT:-3030}
   host: localhost
   allowAnonymous: false
   requireAuth: true
@@ -40,9 +40,9 @@ else
   echo "📦 Database already exists"
 fi
 
-# Start daemon in background
-echo "📡 Starting daemon on port 3030..."
-pnpm --filter @agor/daemon dev &
+# Start daemon in background (use DAEMON_PORT env var or default to 3030)
+echo "📡 Starting daemon on port ${DAEMON_PORT:-3030}..."
+PORT="${DAEMON_PORT:-3030}" pnpm --filter @agor/daemon dev &
 DAEMON_PID=$!
 
 # Wait a bit for daemon to start
@@ -50,7 +50,7 @@ sleep 3
 
 # Start UI in foreground (this keeps container alive)
 echo "🎨 Starting UI on port ${UI_PORT:-5173}..."
-pnpm --filter agor-ui dev --host 0.0.0.0 --port "${UI_PORT:-5173}"
+VITE_DAEMON_PORT="${DAEMON_PORT:-3030}" pnpm --filter agor-ui dev --host 0.0.0.0 --port "${UI_PORT:-5173}"
 
 # If UI exits, kill daemon too
 kill $DAEMON_PID 2>/dev/null || true
