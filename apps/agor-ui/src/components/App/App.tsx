@@ -77,8 +77,14 @@ export interface AppProps {
   onUpdateWorktree?: (worktreeId: string, updates: Partial<Worktree>) => void;
   onCreateWorktree?: (
     repoId: string,
-    data: { name: string; ref: string; createBranch: boolean }
-  ) => void;
+    data: {
+      name: string;
+      ref: string;
+      createBranch: boolean;
+      sourceBranch: string;
+      pullLatest: boolean;
+    }
+  ) => Promise<void>;
   onCreateUser?: (data: CreateUserInput) => void;
   onUpdateUser?: (userId: string, updates: UpdateUserInput) => void;
   onDeleteUser?: (userId: string) => void;

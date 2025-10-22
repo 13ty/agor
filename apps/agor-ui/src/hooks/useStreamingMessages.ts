@@ -6,8 +6,8 @@
  * The complete message will then be available from the database via useMessages.
  */
 
+import type { Message, MessageID, SessionID } from '@agor/core/types';
 import { useEffect, useState } from 'react';
-import type { MessageID, SessionID } from '@agor/core/types';
 import type { useAgorClient } from './useAgorClient';
 
 export interface StreamingMessage {
@@ -17,7 +17,7 @@ export interface StreamingMessage {
   role: 'assistant';
   content: string; // Accumulated chunks
   timestamp: string;
-  isStreaming: true;
+  isStreaming: boolean;
 }
 
 interface StreamingStartEvent {
@@ -171,13 +171,15 @@ export function useStreamingMessages(
     };
 
     // Handler for message created (remove from streaming when persisted to DB)
-    const handleMessageCreated = (message: any) => {
+    const handleMessageCreated = (message: Message) => {
       // Only handle messages for this session
       if (sessionId && message.session_id !== sessionId) {
         return;
       }
 
-      console.debug(`📡 Message created in DB: ${message.message_id.substring(0, 8)} - removing from streaming buffer`);
+      console.debug(
+        `📡 Message created in DB: ${message.message_id.substring(0, 8)} - removing from streaming buffer`
+      );
 
       // Remove from streaming map now that it's in the DB
       setStreamingMessages(prev => {

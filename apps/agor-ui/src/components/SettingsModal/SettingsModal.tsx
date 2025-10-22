@@ -1,6 +1,4 @@
 import type { AgorClient } from '@agor/core/api';
-import { Modal, Tabs } from 'antd';
-import { useState } from 'react';
 import type {
   Board,
   CreateMCPServerInput,
@@ -13,6 +11,8 @@ import type {
   User,
   Worktree,
 } from '@agor/core/types';
+import { Modal, Tabs } from 'antd';
+import { useState } from 'react';
 import { WorktreeModal } from '../WorktreeModal';
 import { BoardsTable } from './BoardsTable';
 import { MCPServersTable } from './MCPServersTable';
@@ -47,7 +47,7 @@ export interface SettingsModalProps {
       sourceBranch: string;
       pullLatest: boolean;
     }
-  ) => void;
+  ) => Promise<void>;
   onCreateUser?: (data: CreateUserInput) => void;
   onUpdateUser?: (userId: string, updates: UpdateUserInput) => void;
   onDeleteUser?: (userId: string) => void;

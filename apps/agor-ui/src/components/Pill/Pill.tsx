@@ -1,3 +1,4 @@
+import type { SessionStatus, TaskStatus } from '@agor/core/types';
 import {
   ApartmentOutlined,
   BranchesOutlined,
@@ -14,7 +15,6 @@ import {
 } from '@ant-design/icons';
 import { message, Tag, theme } from 'antd';
 import type React from 'react';
-import { TaskStatus } from '@agor/core/types';
 
 /**
  * Standardized color palette for pills/badges
@@ -168,32 +168,52 @@ export const SessionIdPill: React.FC<SessionIdPillProps> = ({
 };
 
 interface StatusPillProps extends BasePillProps {
-  status: (typeof TaskStatus)[keyof typeof TaskStatus] | 'pending';
+  status:
+    | (typeof TaskStatus)[keyof typeof TaskStatus]
+    | (typeof SessionStatus)[keyof typeof SessionStatus]
+    | 'pending';
 }
 
 export const StatusPill: React.FC<StatusPillProps> = ({ status, style }) => {
-  const config = {
-    [TaskStatus.COMPLETED]: {
+  // Both TaskStatus and SessionStatus share the same values (completed, failed, running)
+  // So we can use a single config object without duplicates
+  const config: Record<string, { icon: React.ReactElement; color: string; text: string }> = {
+    completed: {
       icon: <CheckCircleOutlined />,
       color: PILL_COLORS.success,
       text: 'Completed',
     },
-    [TaskStatus.FAILED]: {
+    failed: {
       icon: <CloseCircleOutlined />,
       color: PILL_COLORS.error,
       text: 'Failed',
     },
-    [TaskStatus.RUNNING]: {
+    running: {
       icon: <ToolOutlined />,
       color: PILL_COLORS.processing,
       text: 'Running',
     },
+    idle: {
+      icon: <ToolOutlined />,
+      color: PILL_COLORS.session,
+      text: 'Idle',
+    },
     pending: { icon: <ToolOutlined />, color: PILL_COLORS.session, text: 'Pending' },
-  }[status];
+  };
+
+  const statusConfig = config[status];
+  if (!statusConfig) {
+    // Fallback for unknown status
+    return (
+      <Tag icon={<ToolOutlined />} color={PILL_COLORS.session} style={style}>
+        {status}
+      </Tag>
+    );
+  }
 
   return (
-    <Tag icon={config.icon} color={config.color} style={style}>
-      {config.text}
+    <Tag icon={statusConfig.icon} color={statusConfig.color} style={style}>
+      {statusConfig.text}
     </Tag>
   );
 };
