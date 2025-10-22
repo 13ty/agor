@@ -3,7 +3,7 @@ set -e
 
 echo "🎮 Starting Agor Playground..."
 echo ""
-echo "⚡ Fast boot mode - Pre-built production binaries"
+echo "⚡ Dev mode - Running with tsx and Vite"
 echo ""
 
 # Ensure dependencies are installed (in case build didn't complete)
@@ -78,7 +78,7 @@ for i in {1..30}; do
   sleep 1
 done
 
-# Start UI in background (using built dist/)
+# Start UI in background (dev mode - simpler, no build needed)
 cd /workspaces/agor/apps/agor-ui
 echo "🎨 Starting UI on :5173..."
 
@@ -90,7 +90,7 @@ if [ -n "$CODESPACE_NAME" ]; then
   export VITE_DAEMON_URL="$DAEMON_URL"
 fi
 
-pnpm preview > /tmp/agor-ui.log 2>&1 &
+pnpm dev > /tmp/agor-ui.log 2>&1 &
 UI_PID=$!
 
 # Wait for UI to be ready
