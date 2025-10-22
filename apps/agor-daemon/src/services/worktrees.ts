@@ -194,6 +194,9 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
       );
       await mkdir(dirname(logPath), { recursive: true });
 
+      // Detect if this is a detached docker-compose command
+      const isDetached = /docker\s+compose.*up\s+(-d|--detach)/.test(command);
+
       // Spawn process (run in shell to support complex commands)
       const childProcess = spawn(command, {
         cwd: worktree.path,
@@ -226,12 +229,21 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
       childProcess.stdout?.on('data', logStream);
       childProcess.stderr?.on('data', logStream);
 
-      // Handle process exit
+      // Handle process exit (but ignore for detached docker-compose commands)
       childProcess.on('exit', async (code, signal) => {
         console.log(
           `🛑 Environment process exited: ${worktree.name} (code: ${code}, signal: ${signal})`
         );
         this.processes.delete(id);
+
+        // For detached docker-compose commands, ignore successful exits
+        // The containers are still running, just the docker-compose command finished
+        if (isDetached && code === 0) {
+          console.log(
+            `   Ignoring exit for detached command - containers still running, relying on health checks`
+          );
+          return;
+        }
 
         // Update status to stopped or error
         const status = code === 0 ? 'stopped' : 'error';
