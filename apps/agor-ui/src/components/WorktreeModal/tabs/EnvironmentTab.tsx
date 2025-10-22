@@ -343,13 +343,19 @@ export const EnvironmentTab: React.FC<EnvironmentTabProps> = ({
                 Up Command (Start Environment)
               </Text>
               {isEditingTemplate ? (
-                <TextArea
-                  value={upCommand}
-                  onChange={e => setUpCommand(e.target.value)}
-                  placeholder="UI_PORT={{add 9000 worktree.unique_id}} DAEMON_PORT={{add 8000 worktree.unique_id}} pnpm dev"
-                  rows={3}
-                  style={{ fontFamily: 'monospace', fontSize: 11 }}
-                />
+                <>
+                  <TextArea
+                    value={upCommand}
+                    onChange={e => setUpCommand(e.target.value)}
+                    placeholder="DAEMON_PORT={{add 3000 worktree.unique_id}} UI_PORT={{add 5000 worktree.unique_id}} docker compose -p {{worktree.name}} up -d"
+                    rows={3}
+                    style={{ fontFamily: 'monospace', fontSize: 11 }}
+                  />
+                  <Text type="secondary" style={{ fontSize: 10, display: 'block', marginTop: 4 }}>
+                    ⚠️ Command should start services in the background and return (e.g., docker
+                    compose up -d, systemctl start, etc.)
+                  </Text>
+                </>
               ) : (
                 <Text
                   code
@@ -366,13 +372,19 @@ export const EnvironmentTab: React.FC<EnvironmentTabProps> = ({
                 Down Command (Stop Environment)
               </Text>
               {isEditingTemplate ? (
-                <TextArea
-                  value={downCommand}
-                  onChange={e => setDownCommand(e.target.value)}
-                  placeholder="pkill -f 'vite.*{{add 9000 worktree.unique_id}}'"
-                  rows={2}
-                  style={{ fontFamily: 'monospace', fontSize: 11 }}
-                />
+                <>
+                  <TextArea
+                    value={downCommand}
+                    onChange={e => setDownCommand(e.target.value)}
+                    placeholder="docker compose -p {{worktree.name}} down"
+                    rows={2}
+                    style={{ fontFamily: 'monospace', fontSize: 11 }}
+                  />
+                  <Text type="secondary" style={{ fontSize: 10, display: 'block', marginTop: 4 }}>
+                    Command should stop services and return (e.g., docker compose down, systemctl
+                    stop, etc.)
+                  </Text>
+                </>
               ) : (
                 <Text
                   code

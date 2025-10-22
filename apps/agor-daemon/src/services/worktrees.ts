@@ -194,85 +194,33 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
       );
       await mkdir(dirname(logPath), { recursive: true });
 
-      // Detect if this is a detached docker-compose command
-      const isDetached = /docker\s+compose.*up\s+(-d|--detach)/.test(command);
-
-      // Spawn process (run in shell to support complex commands)
-      const childProcess = spawn(command, {
-        cwd: worktree.path,
-        shell: true,
-        detached: false,
-        stdio: ['ignore', 'pipe', 'pipe'],
-      });
-
-      if (!childProcess.pid) {
-        throw new Error('Failed to spawn process (no PID)');
-      }
-
-      // Track process
-      this.processes.set(id, {
-        process: childProcess,
-        pid: childProcess.pid,
-        worktreeId: id,
-        startedAt: new Date(),
-        logPath,
-      });
-
-      // Pipe output to log file
-      const logStream = async (data: Buffer) => {
-        const line = `[${new Date().toISOString()}] ${data.toString()}`;
-        await appendFile(logPath, line).catch(err => {
-          console.error(`Failed to write log: ${err}`);
+      // Execute command and wait for it to complete
+      // The command should start services and return (e.g., docker-compose up -d)
+      await new Promise<void>((resolve, reject) => {
+        const childProcess = spawn(command, {
+          cwd: worktree.path,
+          shell: true,
+          stdio: 'inherit', // Show output directly in daemon logs
         });
-      };
 
-      childProcess.stdout?.on('data', logStream);
-      childProcess.stderr?.on('data', logStream);
-
-      // Handle process exit (but ignore for detached docker-compose commands)
-      childProcess.on('exit', async (code, signal) => {
-        console.log(
-          `🛑 Environment process exited: ${worktree.name} (code: ${code}, signal: ${signal})`
-        );
-        this.processes.delete(id);
-
-        // For detached docker-compose commands, ignore successful exits
-        // The containers are still running, just the docker-compose command finished
-        if (isDetached && code === 0) {
-          console.log(
-            `   Ignoring exit for detached command - containers still running, relying on health checks`
-          );
-          return;
-        }
-
-        // Update status to stopped or error
-        const status = code === 0 ? 'stopped' : 'error';
-        await this.updateEnvironment(
-          id,
-          {
-            status,
-            process: undefined,
-            last_health_check: {
-              timestamp: new Date().toISOString(),
-              status: 'unknown',
-              message: `Process exited with code ${code}`,
-            },
-          },
-          params
-        ).catch(err => {
-          console.error(`Failed to update environment status after exit: ${err}`);
+        childProcess.on('exit', code => {
+          if (code === 0) {
+            console.log(`✅ Start command completed successfully for ${worktree.name}`);
+            resolve();
+          } else {
+            reject(new Error(`Start command exited with code ${code}`));
+          }
         });
+
+        childProcess.on('error', reject);
       });
 
-      // Update status to 'running'
+      // Update status to 'running' - now rely on health checks to monitor
       return await this.updateEnvironment(
         id,
         {
           status: 'running',
-          process: {
-            pid: childProcess.pid,
-            started_at: new Date().toISOString(),
-          },
+          process: undefined, // No subprocess to track
         },
         params
       );
