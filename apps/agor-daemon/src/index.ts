@@ -957,23 +957,39 @@ async function main() {
             const isExitCode1 = errorMessage.includes('Claude Code process exited with code 1');
             const hasResumeSession = !!session.sdk_session_id;
 
-            // Additional heuristics to detect stale session (vs other exit code 1 errors):
-            // - Error doesn't mention missing directory/file (those are config issues)
-            // - Error doesn't mention permission denied (that's a permission issue)
-            // - Error doesn't mention API key (that's an auth issue)
+            // Check if this is specifically a stale Claude Code session error
+            const isStaleSession =
+              errorMessage.includes('No conversation found with session ID') ||
+              errorMessage.includes('session does not exist');
+
+            // Additional heuristics to detect config issues (vs stale session):
+            // - Error mentions missing directory/file (config issue)
+            // - Error mentions permission denied (permission issue)
+            // - Error mentions API key (auth issue)
             const isLikelyConfigIssue =
-              errorMessage.includes('does not exist') ||
+              (errorMessage.includes('does not exist') &&
+                !errorMessage.includes('conversation') &&
+                !errorMessage.includes('session')) ||
               errorMessage.includes('not a directory') ||
               errorMessage.includes('Permission denied') ||
               errorMessage.includes('ENOENT') ||
-              errorMessage.includes('API key') ||
-              errorMessage.includes('not found');
+              errorMessage.includes('API key');
 
-            if (isExitCode1 && hasResumeSession && !isLikelyConfigIssue) {
-              // This should rarely happen now that we proactively detect stale sessions
-              // But if it does, clear it as a safety measure
+            if (isStaleSession && hasResumeSession) {
+              // Explicit stale session error - clear and let user retry
               console.warn(
-                `⚠️  Unexpected exit code 1 with resume session ${session.sdk_session_id}`
+                `⚠️  Stale Claude Code session detected: ${session.sdk_session_id?.substring(0, 8)}`
+              );
+              console.warn(`   Clearing session ID - next prompt will start fresh`);
+
+              // Clear the sdk_session_id so next prompt starts fresh
+              await sessionsService.patch(id, {
+                sdk_session_id: undefined,
+              });
+            } else if (isExitCode1 && hasResumeSession && !isLikelyConfigIssue) {
+              // Generic exit code 1 with resume session (not explicitly stale)
+              console.warn(
+                `⚠️  Unexpected exit code 1 with resume session ${session.sdk_session_id?.substring(0, 8)}`
               );
               console.warn(
                 `   Session should have been validated before SDK call - clearing as safety measure`

@@ -1,4 +1,14 @@
 import type { AgorClient } from '@agor/core/api';
+import type {
+  MCPServer,
+  PermissionMode,
+  PermissionScope,
+  Repo,
+  Session,
+  User,
+  Worktree,
+} from '@agor/core/types';
+import { TaskStatus } from '@agor/core/types';
 import {
   ApiOutlined,
   BranchesOutlined,
@@ -21,16 +31,6 @@ import {
   theme,
 } from 'antd';
 import React from 'react';
-import type {
-  MCPServer,
-  PermissionMode,
-  PermissionScope,
-  Repo,
-  Session,
-  User,
-  Worktree,
-} from '@agor/core/types';
-import { TaskStatus } from '@agor/core/types';
 import { ConversationView } from '../ConversationView';
 import { CreatedByTag } from '../metadata';
 import { PermissionModeSelector } from '../PermissionModeSelector';
@@ -407,7 +407,7 @@ const SessionDrawer = ({
                 width={200}
               />
               {isRunning && <Spin size="small" />}
-              <Button.Group>
+              <Space.Compact>
                 <Tooltip
                   title={
                     isStopping
@@ -447,7 +447,7 @@ const SessionDrawer = ({
                     disabled={isRunning || !inputValue.trim()}
                   />
                 </Tooltip>
-              </Button.Group>
+              </Space.Compact>
             </Space>
           </Space>
         </Space>
