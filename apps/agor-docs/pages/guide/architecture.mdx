@@ -32,11 +32,7 @@ graph TB
             Health[Health Monitor]
         end
 
-        subgraph "Agent SDKs"
-            Claude[Claude Agent SDK]
-            Codex[OpenAI Codex SDK]
-            Gemini[Google Gemini SDK]
-        end
+        AgentSDKs[Agent SDKs<br/>Claude, Codex, Gemini]
 
         ORM[Drizzle ORM<br/>Type-safe queries]
     end
@@ -54,17 +50,10 @@ graph TB
 
     Feathers --> Services
     Services --> ORM
-    Services --> Claude
-    Services --> Codex
-    Services --> Gemini
+    Services --> AgentSDKs
 
     ORM --> DB
     Services --> Git
-
-    style Feathers fill:#2e9a92
-    style Client fill:#2e9a92
-    style DB fill:#f9f9f9,stroke:#333
-    style Git fill:#f9f9f9,stroke:#333
 ```
 
 ## Technology Stack
