@@ -27,8 +27,9 @@ export const DeleteWorktreePopconfirm: React.FC<DeleteWorktreePopconfirmProps> =
   return (
     <Popconfirm
       title="Delete worktree?"
+      overlayStyle={{ maxWidth: 500 }}
       description={
-        <div style={{ maxWidth: 400 }}>
+        <div style={{ width: '100%' }}>
           <p>Are you sure you want to delete worktree "{worktree.name}"?</p>
           {sessionCount > 0 && (
             <p style={{ color: '#ff4d4f' }}>
