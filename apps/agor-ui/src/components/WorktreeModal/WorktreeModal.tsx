@@ -15,7 +15,7 @@ export interface WorktreeModalProps {
   client: AgorClient | null;
   onUpdateWorktree?: (worktreeId: string, updates: Partial<Worktree>) => void;
   onUpdateRepo?: (repoId: string, updates: Partial<Repo>) => void;
-  onDelete?: (worktreeId: string) => void;
+  onDelete?: (worktreeId: string, deleteFromFilesystem: boolean) => void;
   onOpenSettings?: () => void; // Navigate to Settings → Repositories
 }
 

@@ -473,11 +473,13 @@ function AppContent() {
     }
   };
 
-  const handleDeleteWorktree = async (worktreeId: string) => {
+  const handleDeleteWorktree = async (worktreeId: string, deleteFromFilesystem: boolean) => {
     if (!client) return;
     try {
-      // Use worktrees service: DELETE /worktrees/:id
-      await client.service('worktrees').remove(worktreeId);
+      // Use worktrees service: DELETE /worktrees/:id with query parameter
+      await client.service('worktrees').remove(worktreeId, {
+        query: { deleteFromFilesystem },
+      });
       message.success('Worktree deleted successfully!');
     } catch (error) {
       message.error(

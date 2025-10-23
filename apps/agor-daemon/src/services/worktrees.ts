@@ -12,6 +12,7 @@ import { dirname, join } from 'node:path';
 import { ENVIRONMENT } from '@agor/core/config';
 import { type Database, WorktreeRepository } from '@agor/core/db';
 import type { Application } from '@agor/core/feathers';
+import { removeWorktree } from '@agor/core/git';
 import { renderTemplate } from '@agor/core/templates/handlebars-helpers';
 import type { QueryParams, Repo, UUID, Worktree, WorktreeID } from '@agor/core/types';
 import { DrizzleService } from '../adapters/drizzle';
@@ -23,6 +24,7 @@ export type WorktreeParams = QueryParams<{
   repo_id?: UUID;
   name?: string;
   ref?: string;
+  deleteFromFilesystem?: boolean;
 }>;
 
 /**
@@ -86,6 +88,36 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
   }
 
   /**
+   * Override remove to support filesystem deletion
+   */
+  async remove(id: WorktreeID, params?: WorktreeParams): Promise<Worktree> {
+    const { deleteFromFilesystem } = params?.query || {};
+
+    // Get worktree details before deletion
+    const worktree = await this.get(id, params);
+
+    // If deleteFromFilesystem is true, remove from filesystem first
+    if (deleteFromFilesystem) {
+      try {
+        const repo = (await this.app.service('repos').get(worktree.repo_id)) as Repo;
+        console.log(`🗑️  Removing worktree from filesystem: ${worktree.path}`);
+        await removeWorktree(repo.local_path, worktree.path);
+        console.log(`✅ Worktree removed from filesystem successfully`);
+      } catch (error) {
+        console.error(
+          `⚠️  Failed to remove worktree from filesystem:`,
+          error instanceof Error ? error.message : String(error)
+        );
+        // Continue with database deletion even if filesystem deletion fails
+      }
+    }
+
+    // Remove from database - cast since we're removing a single item by ID
+    const result = await super.remove(id, params);
+    return result as Worktree;
+  }
+
+  /**
    * Custom method: Find worktree by repo_id and name
    */
   async findByRepoAndName(
@@ -140,12 +172,14 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
     const oldState = { ...existing.environment_instance };
     const newState = { ...updatedEnvironment };
 
-    // Remove timestamps for comparison
+    // Remove timestamps for comparison - create new objects without timestamp
     if (oldState?.last_health_check) {
-      delete oldState.last_health_check.timestamp;
+      const { timestamp, ...healthCheck } = oldState.last_health_check;
+      oldState.last_health_check = healthCheck as typeof oldState.last_health_check;
     }
     if (newState?.last_health_check) {
-      delete newState.last_health_check.timestamp;
+      const { timestamp, ...healthCheck } = newState.last_health_check;
+      newState.last_health_check = healthCheck as typeof newState.last_health_check;
     }
 
     const hasChanged = JSON.stringify(oldState) !== JSON.stringify(newState);

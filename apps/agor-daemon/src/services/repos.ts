@@ -48,8 +48,8 @@ export class ReposService extends DrizzleService<Repo, Partial<Repo>, RepoParams
     // Check if environment_config is being updated
     const isUpdatingEnvConfig = !!data.environment_config;
 
-    // Perform the patch
-    const updatedRepo = await super.patch(id, data, params);
+    // Perform the patch - cast since we're patching a single item by ID
+    const updatedRepo = (await super.patch(id, data, params)) as Repo;
 
     // If environment config was updated, recompute URLs for all active worktrees
     if (isUpdatingEnvConfig) {

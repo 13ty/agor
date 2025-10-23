@@ -2,6 +2,7 @@ import type { Repo, Session, Worktree } from '@agor/core/types';
 import { DeleteOutlined, EditOutlined, FolderOutlined, LinkOutlined } from '@ant-design/icons';
 import {
   Button,
+  Checkbox,
   Descriptions,
   Input,
   message,
@@ -21,7 +22,7 @@ interface GeneralTabProps {
   repo: Repo;
   sessions: Session[];
   onUpdate?: (worktreeId: string, updates: Partial<Worktree>) => void;
-  onDelete?: (worktreeId: string) => void;
+  onDelete?: (worktreeId: string, deleteFromFilesystem: boolean) => void;
 }
 
 export const GeneralTab: React.FC<GeneralTabProps> = ({
@@ -39,6 +40,9 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
   const [issueUrl, setIssueUrl] = useState(worktree.issue_url || '');
   const [prUrl, setPrUrl] = useState(worktree.pull_request_url || '');
   const [notes, setNotes] = useState(worktree.notes || '');
+
+  // Delete dialog state
+  const [deleteFromFilesystem, setDeleteFromFilesystem] = useState(true);
 
   // Sync local state with prop changes (from WebSocket updates)
   useEffect(() => {
@@ -72,7 +76,7 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
   };
 
   const handleDelete = () => {
-    onDelete?.(worktree.worktree_id);
+    onDelete?.(worktree.worktree_id, deleteFromFilesystem);
   };
 
   return (
@@ -307,14 +311,24 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
           <Popconfirm
             title="Delete worktree?"
             description={
-              <>
+              <div style={{ maxWidth: 400 }}>
                 <p>Are you sure you want to delete worktree "{worktree.name}"?</p>
                 {sessions.length > 0 && (
                   <p style={{ color: '#ff4d4f' }}>
                     ⚠️ {sessions.length} session(s) reference this worktree.
                   </p>
                 )}
-              </>
+                <Checkbox
+                  checked={deleteFromFilesystem}
+                  onChange={e => setDeleteFromFilesystem(e.target.checked)}
+                  style={{ marginTop: 8 }}
+                >
+                  Also delete worktree from filesystem
+                </Checkbox>
+                <p style={{ color: token.colorTextSecondary, marginTop: 4, marginBottom: 0 }}>
+                  Path: {worktree.path}
+                </p>
+              </div>
             }
             onConfirm={handleDelete}
             okText="Delete"
