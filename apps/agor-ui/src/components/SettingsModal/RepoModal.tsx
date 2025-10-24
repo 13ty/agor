@@ -7,11 +7,11 @@
  * - Worktrees: List of worktrees for this repo
  */
 
+import type { Repo } from '@agor/core/types';
 import { FolderOutlined, SettingOutlined } from '@ant-design/icons';
 import { Modal, Tabs, Typography } from 'antd';
-import type { Repo } from '@agor/core/types';
 
-const { Text } = Typography;
+// Using Typography.Text directly to avoid DOM Text interface collision
 
 interface RepoModalProps {
   open: boolean;
@@ -29,47 +29,47 @@ export const RepoModal: React.FC<RepoModalProps> = ({ open, onClose, repo, onUpd
         <div style={{ padding: '16px 24px' }}>
           <div style={{ marginBottom: 24 }}>
             <div style={{ marginBottom: 16 }}>
-              <Text type="secondary" style={{ display: 'block', marginBottom: 4 }}>
+              <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 4 }}>
                 Repository Name
-              </Text>
-              <Text strong>{repo.name}</Text>
+              </Typography.Text>
+              <Typography.Text strong>{repo.name}</Typography.Text>
             </div>
 
             <div style={{ marginBottom: 16 }}>
-              <Text type="secondary" style={{ display: 'block', marginBottom: 4 }}>
+              <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 4 }}>
                 Slug
-              </Text>
-              <Text code>{repo.slug}</Text>
+              </Typography.Text>
+              <Typography.Text code>{repo.slug}</Typography.Text>
             </div>
 
             {repo.remote_url && (
               <div style={{ marginBottom: 16 }}>
-                <Text type="secondary" style={{ display: 'block', marginBottom: 4 }}>
+                <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 4 }}>
                   Remote URL
-                </Text>
-                <Text code style={{ fontSize: 11, wordBreak: 'break-all' }}>
+                </Typography.Text>
+                <Typography.Text code style={{ fontSize: 11, wordBreak: 'break-all' }}>
                   {repo.remote_url}
-                </Text>
+                </Typography.Text>
               </div>
             )}
 
             {repo.local_path && (
               <div style={{ marginBottom: 16 }}>
-                <Text type="secondary" style={{ display: 'block', marginBottom: 4 }}>
+                <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 4 }}>
                   Local Path
-                </Text>
-                <Text code style={{ fontSize: 11, wordBreak: 'break-all' }}>
+                </Typography.Text>
+                <Typography.Text code style={{ fontSize: 11, wordBreak: 'break-all' }}>
                   {repo.local_path}
-                </Text>
+                </Typography.Text>
               </div>
             )}
 
             {repo.default_branch && (
               <div style={{ marginBottom: 16 }}>
-                <Text type="secondary" style={{ display: 'block', marginBottom: 4 }}>
+                <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 4 }}>
                   Default Branch
-                </Text>
-                <Text code>{repo.default_branch}</Text>
+                </Typography.Text>
+                <Typography.Text code>{repo.default_branch}</Typography.Text>
               </div>
             )}
           </div>
@@ -85,15 +85,15 @@ export const RepoModal: React.FC<RepoModalProps> = ({ open, onClose, repo, onUpd
       ),
       children: (
         <div style={{ padding: '16px 24px' }}>
-          <Text type="secondary" style={{ fontSize: 12 }}>
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
             Environment configuration for this repository. Define commands and template variables
             for starting/stopping environments across all worktrees.
-          </Text>
+          </Typography.Text>
           {/* TODO: Phase 2 - Add environment config form */}
           <div style={{ marginTop: 24 }}>
-            <Text type="secondary" italic>
+            <Typography.Text type="secondary" italic>
               Environment configuration UI coming in Phase 2
-            </Text>
+            </Typography.Text>
           </div>
         </div>
       ),

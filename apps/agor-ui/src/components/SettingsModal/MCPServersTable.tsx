@@ -1,3 +1,4 @@
+import type { CreateMCPServerInput, MCPServer, UpdateMCPServerInput } from '@agor/core/types';
 import { DeleteOutlined, EditOutlined, EyeOutlined, PlusOutlined } from '@ant-design/icons';
 import {
   Badge,
@@ -15,9 +16,8 @@ import {
   Typography,
 } from 'antd';
 import { useState } from 'react';
-import type { CreateMCPServerInput, MCPServer, UpdateMCPServerInput } from '@agor/core/types';
 
-const { Text } = Typography;
+// Using Typography.Text directly to avoid DOM Text interface collision
 const { TextArea } = Input;
 
 interface MCPServersTableProps {
@@ -68,7 +68,7 @@ const MCPServerFormFields: React.FC<MCPServerFormFieldsProps> = ({
       )}
 
       <Form.Item label="Description" name="description">
-        <TextArea placeholder="Optional description..." rows={2} />
+        <Typography.TextArea placeholder="Optional description..." rows={2} />
       </Form.Item>
 
       {mode === 'create' && (
@@ -130,7 +130,7 @@ const MCPServerFormFields: React.FC<MCPServerFormFieldsProps> = ({
         name="env"
         tooltip="JSON object of environment variables"
       >
-        <TextArea placeholder='{"API_KEY": "xxx", "ALLOWED_PATHS": "/path"}' rows={3} />
+        <Typography.TextArea placeholder='{"API_KEY": "xxx", "ALLOWED_PATHS": "/path"}' rows={3} />
       </Form.Item>
 
       <Form.Item label="Enabled" name="enabled" valuePropName="checked" initialValue={true}>
@@ -258,9 +258,9 @@ export const MCPServersTable: React.FC<MCPServersTableProps> = ({
       render: (_: string, server: MCPServer) => (
         <div>
           <div>{server.display_name || server.name}</div>
-          <Text type="secondary" style={{ fontSize: 12 }}>
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
             {server.name}
-          </Text>
+          </Typography.Text>
         </div>
       ),
     },
@@ -305,7 +305,7 @@ export const MCPServersTable: React.FC<MCPServersTableProps> = ({
       dataIndex: 'source',
       key: 'source',
       width: 100,
-      render: (source: string) => <Text type="secondary">{source}</Text>,
+      render: (source: string) => <Typography.Text type="secondary">{source}</Typography.Text>,
     },
     {
       title: 'Actions',

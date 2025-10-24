@@ -3,7 +3,7 @@ import { DeleteOutlined, EditOutlined, FolderOutlined, PlusOutlined } from '@ant
 import { Button, Card, Empty, Form, Input, Modal, Popconfirm, Space, Tag, Typography } from 'antd';
 import { useState } from 'react';
 
-const { Text } = Typography;
+// Using Typography.Text directly to avoid DOM Text interface collision
 
 // Utility: Extract slug from Git URL (org/repo format)
 function extractSlugFromUrl(url: string): string {
@@ -118,7 +118,9 @@ export const ReposTable: React.FC<ReposTableProps> = ({ repos, onCreate, onUpdat
           alignItems: 'center',
         }}
       >
-        <Text type="secondary">Clone and manage git repositories for your sessions.</Text>
+        <Typography.Text type="secondary">
+          Clone and manage git repositories for your sessions.
+        </Typography.Text>
         <Button type="primary" icon={<PlusOutlined />} onClick={handleOpenCreateModal}>
           New Repository
         </Button>
@@ -126,7 +128,9 @@ export const ReposTable: React.FC<ReposTableProps> = ({ repos, onCreate, onUpdat
 
       {repos.length === 0 && (
         <Empty description="No repositories yet" style={{ marginTop: 32, marginBottom: 32 }}>
-          <Text type="secondary">Click "New Repository" to clone a git repository.</Text>
+          <Typography.Text type="secondary">
+            Click "New Repository" to clone a git repository.
+          </Typography.Text>
         </Empty>
       )}
 
@@ -139,7 +143,7 @@ export const ReposTable: React.FC<ReposTableProps> = ({ repos, onCreate, onUpdat
               title={
                 <Space>
                   <FolderOutlined />
-                  <Text strong>{repo.name}</Text>
+                  <Typography.Text strong>{repo.name}</Typography.Text>
                   <Tag color="blue" style={{ marginLeft: 8 }}>
                     Managed
                   </Tag>
@@ -176,33 +180,33 @@ export const ReposTable: React.FC<ReposTableProps> = ({ repos, onCreate, onUpdat
               {/* Repo metadata */}
               <Space direction="vertical" size={8} style={{ width: '100%' }}>
                 <div>
-                  <Text type="secondary" style={{ fontSize: 12 }}>
+                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                     Slug:{' '}
-                  </Text>
-                  <Text code style={{ fontSize: 12 }}>
+                  </Typography.Text>
+                  <Typography.Text code style={{ fontSize: 12 }}>
                     {repo.slug}
-                  </Text>
+                  </Typography.Text>
                 </div>
 
                 {repo.remote_url && (
                   <div>
-                    <Text type="secondary" style={{ fontSize: 12 }}>
+                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                       Remote:{' '}
-                    </Text>
-                    <Text code style={{ fontSize: 11 }}>
+                    </Typography.Text>
+                    <Typography.Text code style={{ fontSize: 11 }}>
                       {repo.remote_url}
-                    </Text>
+                    </Typography.Text>
                   </div>
                 )}
 
                 {repo.local_path && (
                   <div>
-                    <Text type="secondary" style={{ fontSize: 12 }}>
+                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                       Path:{' '}
-                    </Text>
-                    <Text code style={{ fontSize: 11 }}>
+                    </Typography.Text>
+                    <Typography.Text code style={{ fontSize: 11 }}>
                       {repo.local_path}
-                    </Text>
+                    </Typography.Text>
                   </div>
                 )}
               </Space>

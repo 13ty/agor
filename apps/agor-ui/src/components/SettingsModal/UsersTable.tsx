@@ -1,3 +1,4 @@
+import type { CreateUserInput, UpdateUserInput, User } from '@agor/core/types';
 import { DeleteOutlined, EditOutlined, PlusOutlined, SmileOutlined } from '@ant-design/icons';
 import {
   Button,
@@ -14,9 +15,8 @@ import {
 } from 'antd';
 import EmojiPicker, { type EmojiClickData, Theme } from 'emoji-picker-react';
 import { useState } from 'react';
-import type { CreateUserInput, UpdateUserInput, User } from '@agor/core/types';
 
-const { Text } = Typography;
+// Using Typography.Text directly to avoid DOM Text interface collision
 
 interface UsersTableProps {
   users: User[];
@@ -125,7 +125,7 @@ export const UsersTable: React.FC<UsersTableProps> = ({ users, onCreate, onUpdat
       title: 'Name',
       dataIndex: 'name',
       key: 'name',
-      render: (name: string) => <Text>{name || '—'}</Text>,
+      render: (name: string) => <Typography.Text>{name || '—'}</Typography.Text>,
     },
     {
       title: 'Role',
