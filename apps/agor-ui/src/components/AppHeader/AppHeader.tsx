@@ -9,7 +9,7 @@ import {
   UserOutlined,
 } from '@ant-design/icons';
 import type { MenuProps } from 'antd';
-import { Badge, Button, Dropdown, Layout, Space, Typography } from 'antd';
+import { Badge, Button, Dropdown, Layout, Space, Typography, theme } from 'antd';
 import { Facepile } from '../Facepile';
 
 const { Header } = Layout;
@@ -42,6 +42,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   currentBoardIcon,
   unreadCommentsCount = 0,
 }) => {
+  const { token } = theme.useToken();
   const userEmoji = user?.emoji || '👤';
 
   const userMenuItems: MenuProps['items'] = [
@@ -133,17 +134,21 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
         )}
         <Button
           type="text"
-          icon={<GithubOutlined />}
+          icon={<GithubOutlined style={{ fontSize: token.fontSizeLG }} />}
           href="https://github.com/mistercrunch/agor"
           target="_blank"
           rel="noopener noreferrer"
           style={{ color: '#fff' }}
           title="View on GitHub"
         />
-        <Badge count={unreadCommentsCount} offset={[-2, 2]}>
+        <Badge
+          count={unreadCommentsCount}
+          offset={[-2, 2]}
+          style={{ backgroundColor: token.colorPrimaryBgHover }}
+        >
           <Button
             type="text"
-            icon={<CommentOutlined />}
+            icon={<CommentOutlined style={{ fontSize: token.fontSizeLG }} />}
             onClick={onCommentsClick}
             style={{ color: '#fff' }}
             title="Toggle comments panel"
@@ -151,27 +156,27 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
         </Badge>
         <Button
           type="text"
-          icon={<MenuOutlined />}
+          icon={<MenuOutlined style={{ fontSize: token.fontSizeLG }} />}
           onClick={onMenuClick}
           style={{ color: '#fff' }}
         />
         <Button
           type="text"
-          icon={<CodeOutlined />}
+          icon={<CodeOutlined style={{ fontSize: token.fontSizeLG }} />}
           onClick={onTerminalClick}
           style={{ color: '#fff' }}
           title="Open Terminal"
         />
         <Button
           type="text"
-          icon={<SettingOutlined />}
+          icon={<SettingOutlined style={{ fontSize: token.fontSizeLG }} />}
           onClick={onSettingsClick}
           style={{ color: '#fff' }}
         />
         <Dropdown menu={{ items: userMenuItems }} placement="bottomRight" trigger={['click']}>
           <Button
             type="text"
-            icon={<UserOutlined />}
+            icon={<UserOutlined style={{ fontSize: token.fontSizeLG }} />}
             style={{ color: '#fff' }}
             title={user?.name || 'User menu'}
           />

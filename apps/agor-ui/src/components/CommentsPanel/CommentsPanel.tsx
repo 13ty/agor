@@ -3,6 +3,7 @@ import type { BoardComment, CommentReaction, ReactionSummary, User } from '@agor
 import { groupReactions, isThreadRoot } from '@agor/core/types';
 import {
   CheckOutlined,
+  CloseOutlined,
   CommentOutlined,
   DeleteOutlined,
   LeftOutlined,
@@ -27,7 +28,7 @@ import {
 import EmojiPicker, { Theme } from 'emoji-picker-react';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 
-const { Text } = Typography;
+const { Text, Title } = Typography;
 
 export interface CommentsPanelProps {
   client: AgorClient | null;
@@ -47,7 +48,7 @@ export interface CommentsPanelProps {
   selectedCommentId?: string | null;
 }
 
-type FilterMode = 'all' | 'open' | 'mentions';
+type FilterMode = 'all' | 'active';
 
 /**
  * Reaction display component - shows existing reactions as pills
@@ -454,7 +455,7 @@ export const CommentsPanel: React.FC<CommentsPanelProps> = ({
   selectedCommentId,
 }) => {
   const { token } = theme.useToken();
-  const [filter, setFilter] = useState<FilterMode>('all');
+  const [filter, setFilter] = useState<FilterMode>('active');
   const [commentInputValue, setCommentInputValue] = useState('');
 
   // Create refs for scroll-to-view
@@ -483,12 +484,11 @@ export const CommentsPanel: React.FC<CommentsPanelProps> = ({
   const filteredThreads = useMemo(() => {
     return threadRoots
       .filter(thread => {
-        if (filter === 'open' && thread.resolved) return false;
-        if (filter === 'mentions' && !thread.mentions?.includes(currentUserId)) return false;
+        if (filter === 'active' && thread.resolved) return false;
         return true;
       })
       .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-  }, [threadRoots, filter, currentUserId]);
+  }, [threadRoots, filter]);
 
   // Scroll to selected comment when it changes
   useEffect(() => {
@@ -528,16 +528,24 @@ export const CommentsPanel: React.FC<CommentsPanelProps> = ({
         }}
       >
         <Space>
-          <CommentOutlined style={{ fontSize: token.fontSizeSM }} />
-          <Text strong style={{ fontSize: token.fontSizeSM }}>
+          <CommentOutlined />
+          <Title level={5} style={{ margin: 0 }}>
             Comments
-          </Text>
-          <Badge count={filteredThreads.length} showZero={false} />
+          </Title>
+          <Badge
+            count={filteredThreads.length}
+            showZero={false}
+            style={{ backgroundColor: token.colorPrimaryBgHover }}
+          />
         </Space>
         {onToggleCollapse && (
-          <Button type="text" size="small" onClick={onToggleCollapse}>
-            Close
-          </Button>
+          <Button
+            type="text"
+            size="small"
+            icon={<CloseOutlined />}
+            onClick={onToggleCollapse}
+            danger
+          />
         )}
       </div>
 
@@ -551,25 +559,18 @@ export const CommentsPanel: React.FC<CommentsPanelProps> = ({
       >
         <Space>
           <Button
+            type={filter === 'active' ? 'primary' : 'default'}
+            size="small"
+            onClick={() => setFilter('active')}
+          >
+            Active
+          </Button>
+          <Button
             type={filter === 'all' ? 'primary' : 'default'}
             size="small"
             onClick={() => setFilter('all')}
           >
             All
-          </Button>
-          <Button
-            type={filter === 'open' ? 'primary' : 'default'}
-            size="small"
-            onClick={() => setFilter('open')}
-          >
-            Open
-          </Button>
-          <Button
-            type={filter === 'mentions' ? 'primary' : 'default'}
-            size="small"
-            onClick={() => setFilter('mentions')}
-          >
-            Mentions
           </Button>
         </Space>
       </div>
