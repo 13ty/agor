@@ -7,8 +7,8 @@ Simple todo list for launch preparation.
 ### Core Features
 
 - [ ] Troubleshoot Claude session edge cases (unclear/incomplete results)
-- [ ] Session forking UI with genealogy visualization in WorktreeCard
-- [ ] Session spawning UI with genealogy visualization in WorktreeCard
+- [x] Session forking UI with genealogy visualization in WorktreeCard
+- [x] Session spawning UI with genealogy visualization in WorktreeCard
 
 ### Documentation
 
