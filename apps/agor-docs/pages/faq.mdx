@@ -35,18 +35,53 @@ Each worktree is completely isolated - changes in one don't affect the other. Th
 
 **Agor manages the git worktrees for you** - no need to run `git worktree add` manually. Just create a worktree in the UI or CLI, and Agor handles the git operations.
 
+## Session trees? WTF?
+
+**Sessions in Agor can fork and spawn, creating genealogy trees** - this is what makes Agor fundamentally different from linear CLI tools.
+
+```
+Session: "Build authentication system"
+├─ Fork: "Write tests for auth"
+├─ Fork: "Build user profile that uses auth"
+└─ Spawn: "Research OAuth2 best practices"
+   └─ Spawn: "Evaluate PKCE vs implicit flow"
+```
+
+### Why this matters:
+
+**Traditional AI coding tools**: Linear conversation. Want to try something different? Start over or lose your context.
+
+**Agor**: Branch your conversation like git branches code. Every fork/spawn is:
+- **Introspectable** - full conversation history kept
+- **Composable** - fork from forks, spawn from spawns
+- **Multiplayer-friendly** - teammates see the tree, understand the exploration
+- **Resumable** - post-prompt any session in the tree anytime
+
+### The groundbreaking part:
+
+Most people don't know you can do this! Context engineering is usually about:
+- Crafting the perfect prompt
+- Managing context window size
+- Knowing what to include/exclude
+
+**Agor adds**: Session-level branching and composition. You can:
+1. **Fork** to parallelize work with shared context ([details below](#what-happens-when-i-fork-a-session))
+2. **Spawn** to delegate with curated context ([details below](#what-happens-when-i-spawn-a-subtask))
+3. Combine both to orchestrate complex multi-agent workflows
+4. Inspect the entire tree to understand how work evolved
+
+**Visual organization**: On boards, you see worktrees (projects) containing session trees (conversation genealogy). It's like Trello for AI conversations, but with git-style branching.
+
 ## What happens when I "fork" a session?
 
-**IMPORTANT**: When you fork a session, you're forking the **CONTEXT WINDOW** (conversation history), NOT the git worktree.
+**Forking creates a sibling session with a COPY of the conversation context at that moment** - perfect for parallel work streams that need the same starting knowledge but different focus.
+
+**IMPORTANT**: You're forking the **CONTEXT WINDOW** (conversation history), NOT the git worktree.
 
 - ✅ **Forked**: Conversation history, AI's memory of what was discussed
 - ❌ **NOT forked**: Git state, filesystem, worktree
 
 **Both sessions work on the SAME worktree.** If one session creates a file, the other session sees it immediately. This is NOT like git branches!
-
-## Why would I fork a session?
-
-**Forking creates a sibling session with a COPY of the conversation context at that moment** - perfect for parallel work streams that need the same starting knowledge but different focus.
 
 After forking, the conversations diverge. The fork has its own independent conversation history going forward.
 
