@@ -319,10 +319,11 @@ const SessionDrawer = ({
         },
       }}
     >
-      {/* Genealogy Tags */}
-      {(isForked || isSpawned) && (
+      {/* All pills in one line */}
+      {(isForked || isSpawned || worktree || sessionMcpServerIds.length > 0) && (
         <div style={{ marginBottom: token.sizeUnit }}>
-          <Space size={4} wrap>
+          <Space size={8} wrap>
+            {/* Genealogy Tags */}
             {isForked && session.genealogy.forked_from_session_id && (
               <ForkPill
                 fromSessionId={session.genealogy.forked_from_session_id}
@@ -335,33 +336,37 @@ const SessionDrawer = ({
                 taskId={session.genealogy.spawn_point_task_id}
               />
             )}
-          </Space>
-        </div>
-      )}
-
-      {/* Worktree Info */}
-      {worktree && (
-        <div style={{ marginBottom: token.sizeUnit }}>
-          <Space size={8} wrap>
-            {repo && (
+            {/* Worktree Info */}
+            {worktree && repo && (
               <RepoPill
                 repoName={repo.slug}
                 worktreeName={worktree.name}
                 onClick={onOpenWorktree ? () => onOpenWorktree(worktree.worktree_id) : undefined}
               />
             )}
-            <EnvironmentPill
-              repo={repo || ({} as Repo)}
-              worktree={worktree}
-              onEdit={
-                onOpenWorktree
-                  ? () => {
-                      onClose(); // Close drawer first to avoid focus trap
-                      onOpenWorktree(worktree.worktree_id);
-                    }
-                  : undefined
-              }
-            />
+            {worktree && (
+              <EnvironmentPill
+                repo={repo || ({} as Repo)}
+                worktree={worktree}
+                onEdit={
+                  onOpenWorktree
+                    ? () => {
+                        onClose(); // Close drawer first to avoid focus trap
+                        onOpenWorktree(worktree.worktree_id);
+                      }
+                    : undefined
+                }
+              />
+            )}
+            {/* MCP Servers */}
+            {sessionMcpServerIds
+              .map(serverId => mcpServers.find(s => s.mcp_server_id === serverId))
+              .filter(Boolean)
+              .map(server => (
+                <Tag key={server?.mcp_server_id} color="purple" icon={<ApiOutlined />}>
+                  {server?.display_name || server?.name}
+                </Tag>
+              ))}
           </Space>
         </div>
       )}
@@ -377,22 +382,6 @@ const SessionDrawer = ({
           </Space>
         </div>
       )} */}
-
-      {/* MCP Servers */}
-      {sessionMcpServerIds.length > 0 && (
-        <div style={{ marginBottom: token.sizeUnit }}>
-          <Space size={4} wrap>
-            {sessionMcpServerIds
-              .map(serverId => mcpServers.find(s => s.mcp_server_id === serverId))
-              .filter(Boolean)
-              .map(server => (
-                <Tag key={server?.mcp_server_id} color="purple" icon={<ApiOutlined />}>
-                  {server?.display_name || server?.name}
-                </Tag>
-              ))}
-          </Space>
-        </div>
-      )}
 
       <Divider style={{ margin: `${token.sizeUnit * 2}px 0` }} />
 
