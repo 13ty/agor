@@ -26,7 +26,7 @@ docker compose up
 
 ## Screenshots
 
-![Agor Board View](apps/agor-docs/public/screenshots/board.png)
+![Agor Hero](apps/agor-docs/public/hero.png)
 
 _Multiplayer spatial canvas with zones, real-time cursors, and session organization_
 
