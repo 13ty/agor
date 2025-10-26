@@ -37,7 +37,7 @@ export function SandboxBanner() {
             <Space>
               <Typography.Text strong>🧪 Sandbox Mode - GitHub Codespaces</Typography.Text>
               <Typography.Text type="secondary">
-                Early beta - Data is ephemeral. Avoid sensitive data.
+                Data is ephemeral. Avoid sensitive data.
               </Typography.Text>
               <Button
                 size="small"

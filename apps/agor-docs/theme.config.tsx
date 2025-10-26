@@ -14,18 +14,6 @@ const config: DocsThemeConfig = {
         suppressHydrationWarning
       />
       <strong style={{ fontSize: '18px' }}>Agor</strong>
-      <span
-        style={{
-          fontSize: '11px',
-          padding: '2px 6px',
-          background: '#2e9a92',
-          color: 'white',
-          borderRadius: '4px',
-          fontWeight: 600,
-        }}
-      >
-        BETA
-      </span>
     </span>
   ),
   project: {
