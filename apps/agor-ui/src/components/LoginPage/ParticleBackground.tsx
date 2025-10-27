@@ -71,10 +71,10 @@ export function ParticleBackground() {
           width: 1.5,
         },
         move: {
-          direction: 'none',
+          direction: 'none' as const,
           enable: true,
           outModes: {
-            default: 'bounce',
+            default: 'bounce' as const,
           },
           random: false,
           speed: 1,
@@ -82,7 +82,7 @@ export function ParticleBackground() {
         },
         collisions: {
           enable: true,
-          mode: 'bounce',
+          mode: 'bounce' as const,
         },
         number: {
           density: {
