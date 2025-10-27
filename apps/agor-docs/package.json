@@ -11,6 +11,9 @@
     "generate:cli": "tsx scripts/generate-cli-docs.ts"
   },
   "dependencies": {
+    "@tsparticles/engine": "^3.9.1",
+    "@tsparticles/react": "^3.0.0",
+    "@tsparticles/slim": "^3.9.1",
     "next": "^14.2.0",
     "nextra": "^3.2.0",
     "nextra-theme-docs": "^3.2.0",
