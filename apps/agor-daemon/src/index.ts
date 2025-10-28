@@ -9,7 +9,7 @@ import 'dotenv/config';
 import { loadConfig, type UnknownJson } from '@agor/core/config';
 
 // Read package version once at startup (not on every /health request)
-let DAEMON_VERSION = '0.1.0';
+let DAEMON_VERSION = '0.0.0';
 try {
   const pkgPath = new URL('../package.json', import.meta.url);
   const pkg = await import(pkgPath.href, { assert: { type: 'json' } });

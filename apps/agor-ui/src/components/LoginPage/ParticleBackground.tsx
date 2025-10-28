@@ -53,9 +53,10 @@ export function ParticleBackground() {
             quantity: 4,
           },
           attract: {
-            distance: 300,
-            duration: 0.3,
-            speed: 5,
+            distance: 400, // Larger attraction radius
+            duration: 0.4, // Smoother transition
+            speed: 8, // Faster attraction to cursor
+            factor: 10, // Strong pull effect
           },
         },
       },
