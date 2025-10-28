@@ -6,9 +6,9 @@ date: 2025-10-26
 
 # Agor: A Multiplayer-ready, Spatial Layer for Agentic Coding
 
-Once in a while the stars line up and something that felt "obvious but not quite here yet" suddenly clicks. Agents got scary good, we all started plate‑spinning across terminal chats, and the handoffs/visibility/env stuff just didn’t keep up. Agor is my answer to that moment: a multiplayer, spatial layer for agent orchestration.
+The pace of development has accelerated, but the process hasn't kept up. Days waiting for reviews. Constant branch switching. Environment juggling. Juggling as many terminal windows as agents you can handle—even when tmux shortcuts are muscle memory. Coordination over Slack. "Oh, before you push..." "Can you pull latest?" "Docker isn't running." The SDLC is bottlenecked by handoffs and waiting, not by the coding itself.
 
-Not another chat window — an actual canvas where sessions live, fork, spawn, and move; where zones trigger real workflows; where worktrees run their own envs without port roulette. Think Figma energy, but for code and agents. Massive props to the folks making these models and SDKs — the superpower is real. Agor is the glue that lets teams (and swarms) actually use it together.
+Just as Figma transformed design from a solo, file-based workflow into real-time spatial collaboration, Agor does the same for software development. A multiplayer canvas where every feature lives in its own worktree with a running environment. Where code reviews happen on a board backed by live dev servers, with a swarm of AIs a click away—not in Slack threads. Where you see what your teammates (and their AI agents) are building in real-time, without asking for status updates. The development workflow, rebuilt for the speed we code at now.
 
 ## Why this matters
 
@@ -21,10 +21,30 @@ Agor flips that into a multiplayer canvas. See all the work at once. Fork withou
 - Spatial canvas: Arrange sessions on a 2D board. Presence shows who’s where. Your brain remembers places better than scrollback.
 - Session trees: Fork to parallelize, spawn to delegate. Fresh, clean context when you need it; shared context when you don’t.
 - Worktrees + envs: Each worktree gets its own dev server and ports. Parallel features without stepping on toes.
-- Zone triggers: Drag a card into “Needs Tests” or “Ready for Review” and a templated prompt fires with live board/worktree/session context.
+- Zone triggers: Drag a card into "Needs Tests" or "Ready for Review" and a templated prompt fires with live board/worktree/session context.
 - SDK‑first orchestration: Coordinate Claude Code, Codex, and Gemini via SDKs (MCP baked in). No brittle CLI scraping.
 
-For a quick peek, see the project [README](https://github.com/mistercrunch/agor#readme) for GIFs and screencaps (zones, session trees, envs).
+## Demo
+
+13-minute walkthrough showing Agor's key features in action:
+
+<div style={{ margin: '2rem 0', maxWidth: '100%' }}>
+  <div style={{ position: 'relative', paddingBottom: '56.25%', height: 0 }}>
+    <iframe
+      src="https://www.youtube.com/embed/qiYHw20zjzE"
+      style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', borderRadius: '8px' }}
+      frameBorder="0"
+      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+      allowFullScreen
+    />
+  </div>
+</div>
+
+You'll see:
+- Spatial canvas with worktrees and session trees
+- Zone triggers firing templated prompts
+- Per-worktree environments with auto-assigned ports
+- Real-time multiplayer presence and cursors
 
 ## Quick start
 

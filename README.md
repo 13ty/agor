@@ -1,9 +1,10 @@
+<img src="https://github.com/user-attachments/assets/e34f3d25-71dd-4084-8f3e-4f1c73381c66" alt="Agor Logo" width="320" />
+
 # Agor
 
-Multiplayer canvas for orchestrating Claude Code, Codex, and Gemini sessions.
+Orchestrate Claude Code, Codex, and Gemini sessions on a multiplayer canvas. Manage git worktrees, track AI conversations, and visualize your team's agentic work in real-time.
 
-**Website:** https://agor.live
-**GitHub:** https://github.com/mistercrunch/agor
+**[Docs](https://mistercrunch.github.io/agor/)** | **[Discussions](https://github.com/mistercrunch/agor/discussions)**
 
 ---
 
@@ -13,29 +14,22 @@ Multiplayer canvas for orchestrating Claude Code, Codex, and Gemini sessions.
 npm install -g agor-live
 ```
 
-This installs two commands:
-
-- **`agor`** - CLI for managing repos, sessions, and configuration
-- **`agor-daemon`** - Background service with built-in web UI
-
----
-
 ## Quick Start
 
 ```bash
-# 1. Initialize Agor (creates ~/.agor/ and database)
+# 1. Initialize (creates ~/.agor/ and database)
 agor init
 
-# 2. Start the daemon (runs on http://localhost:3030)
+# 2. Start the daemon
 agor daemon start
 
-# 3. Open the web UI in your browser
-agor ui open
-
-# Or use the CLI
-agor repo add ~/my-project
-agor session create
+# 3. Open the UI
+agor open
 ```
+
+**Try in Codespaces:**
+
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/mistercrunch/agor?quickstart=1&devcontainer_path=.devcontainer%2Fplayground%2Fdevcontainer.json)
 
 ---
 
@@ -43,23 +37,83 @@ agor session create
 
 - **Agent orchestration** - Run Claude Code, Codex, Gemini from one interface
 - **Git worktree management** - Isolated workspaces per session, no branch conflicts
-- **Real-time multiplayer** - See teammates' sessions, collaborate async
+- **Real-time board** - Drag sessions around, organize by project/phase/zone
 - **Session tracking** - Every AI conversation is stored, searchable, forkable
 - **MCP integration** - Configure MCP servers once, use across all agents
+- **Multiplayer** - See teammates' sessions, share environments, async handoffs
 
 ---
 
-## Learn More
+## Core Concepts
 
-- **Documentation:** https://agor.live/guide/getting-started
-- **Architecture:** https://agor.live/guide/architecture
-- **Discussions:** https://github.com/mistercrunch/agor/discussions
+**Sessions** - Container for agent interactions with git state, tasks, genealogy
+**Worktrees** - Git worktrees managed by Agor, isolated per session
+**Boards** - Spatial canvas for organizing sessions (like Trello for AI work)
+**Zones** - Areas on board that trigger templated prompts when sessions dropped
+**Tasks** - User prompts tracked as first-class work units
 
 ---
 
-## License
+## Architecture
 
-Business Source License 1.1 (BUSL-1.1)
+```
+Frontend (React + Ant Design)
+    ↓ WebSocket
+Daemon (FeathersJS)
+    ↓
+Database (LibSQL) + Git Worktrees
+    ↓
+Agent SDKs (Claude, Codex, Gemini)
+```
 
-Free for non-production use. Commercial licenses available from the author.
-Converts to Apache 2.0 on 2029-01-15.
+**Stack:** FeathersJS, Drizzle ORM, LibSQL, React Flow, Ant Design
+
+See [Architecture Guide](https://mistercrunch.github.io/agor/guide/architecture) for details.
+
+---
+
+## Key Features
+
+### Git Worktree Management
+
+Every session maps to a git worktree - no more branch conflicts when running parallel AI work.
+
+### Environment Management
+
+Start/stop dev servers per worktree. Each gets unique ports. Share running environments with teammates via URL.
+
+### Zone Triggers
+
+Drop sessions on zones to trigger templated workflows (analyze → develop → review → deploy).
+
+### Session Genealogy
+
+Fork sessions to explore alternatives. Spawn subtasks with fresh context. Full ancestry tracking.
+
+### Multi-Agent Support
+
+Swap between Claude/Codex/Gemini mid-task. Compare outputs. Hand off when one model stalls.
+
+---
+
+## Development
+
+```bash
+# Terminal 1: Daemon
+cd apps/agor-daemon && pnpm dev  # :3030
+
+# Terminal 2: UI
+cd apps/agor-ui && pnpm dev      # :5173
+```
+
+See [CLAUDE.md](CLAUDE.md) for dev workflow and [PROJECT.md](PROJECT.md) for roadmap.
+
+---
+
+## Roadmap
+
+- Match CLI-native features as SDKs evolve
+- Bring Your Own IDE (VSCode/Cursor remote connection)
+- Session forking UI with genealogy visualization
+- Automated reports after task completion
+- Context management system (modular markdown files)
