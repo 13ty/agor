@@ -47,6 +47,7 @@ export const WorktreeModal: React.FC<WorktreeModalProps> = ({
       open={open}
       onCancel={onClose}
       footer={null}
+      width={900}
       maskClosable={false}
       styles={{
         body: { padding: 0, maxHeight: '80vh', overflowY: 'auto' },

@@ -290,6 +290,11 @@ export default class Init extends Command {
     if (!skipPrompts) {
       await this.promptAuthSetup(dbPath);
       await this.promptApiKeys();
+    } else {
+      // With --force, enable auth by default (multiplayer mode)
+      await setConfigValue('daemon.requireAuth', true);
+      await setConfigValue('daemon.allowAnonymous', false);
+      this.log(`${chalk.green('   ✓')} Enabled authentication (multiplayer mode)`);
     }
 
     // Success summary

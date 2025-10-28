@@ -27,7 +27,7 @@ interface AgenticToolOption {
 }
 
 import { DownOutlined } from '@ant-design/icons';
-import { Alert, Collapse, Form, Modal, Radio, Select, Space, Typography } from 'antd';
+import { Alert, Collapse, Form, Input, Modal, Radio, Select, Space, Typography } from 'antd';
 import Handlebars from 'handlebars';
 import { useEffect, useMemo, useState } from 'react';
 import { AgenticToolConfigForm } from '../../AgenticToolConfigForm';
@@ -87,6 +87,9 @@ export const ZoneTriggerModal = ({
 
   // Action selection (only for reuse mode)
   const [selectedAction, setSelectedAction] = useState<'prompt' | 'fork' | 'spawn'>('prompt');
+
+  // Editable rendered template (user can modify before executing)
+  const [editableTemplate, setEditableTemplate] = useState<string>('');
 
   // Filter sessions for this worktree
   const worktreeSessions = useMemo(() => {
@@ -185,6 +188,11 @@ export const ZoneTriggerModal = ({
     worktreeSessions,
   ]);
 
+  // Update editable template when rendered template changes
+  useEffect(() => {
+    setEditableTemplate(renderedTemplate);
+  }, [renderedTemplate]);
+
   const handleExecute = async () => {
     if (mode === 'create_new') {
       // Get form values for new session
@@ -192,7 +200,7 @@ export const ZoneTriggerModal = ({
       await onExecute({
         sessionId: 'new',
         action: 'prompt',
-        renderedTemplate,
+        renderedTemplate: editableTemplate, // Use edited template
         agent: selectedAgent,
         modelConfig: formValues.modelConfig,
         permissionMode: formValues.permissionMode,
@@ -204,7 +212,7 @@ export const ZoneTriggerModal = ({
       await onExecute({
         sessionId: selectedSessionId,
         action: selectedAction,
-        renderedTemplate,
+        renderedTemplate: editableTemplate, // Use edited template
         // Include agent config for fork/spawn actions
         ...(selectedAction === 'fork' || selectedAction === 'spawn'
           ? {
@@ -390,26 +398,22 @@ export const ZoneTriggerModal = ({
           </Form>
         )}
 
-        {/* Template Preview */}
+        {/* Editable Template */}
         <div>
           <Typography.Text strong style={{ display: 'block', marginBottom: 8 }}>
-            Rendered Prompt
+            Prompt (editable)
           </Typography.Text>
-          <pre
+          <Input.TextArea
+            value={editableTemplate}
+            onChange={e => setEditableTemplate(e.target.value)}
+            rows={8}
             style={{
-              whiteSpace: 'pre-wrap',
-              background: '#1f1f1f',
-              padding: '12px',
-              borderRadius: '4px',
-              margin: 0,
               fontFamily: 'monospace',
               fontSize: '13px',
               lineHeight: '1.5',
-              color: '#d4d4d4',
             }}
-          >
-            {renderedTemplate}
-          </pre>
+            placeholder="Edit the rendered prompt before executing..."
+          />
         </div>
       </Space>
     </Modal>

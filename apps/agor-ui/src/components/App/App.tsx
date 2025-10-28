@@ -376,6 +376,7 @@ export const App: React.FC<AppProps> = ({
   });
 
   // Include current user in the facepile (always first)
+  // Filter out current user from activeUsers to avoid duplication
   const allActiveUsers = user
     ? [
         {
@@ -383,7 +384,7 @@ export const App: React.FC<AppProps> = ({
           lastSeen: Date.now(),
           cursor: undefined, // Current user doesn't have a remote cursor
         },
-        ...activeUsers,
+        ...activeUsers.filter(activeUser => activeUser.user.user_id !== user.user_id),
       ]
     : activeUsers;
 
