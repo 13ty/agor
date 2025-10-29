@@ -28,7 +28,7 @@ All three use official SDKs for programmatic control, streaming, and session man
 | **Session Continuity**            | ✅ sdk_session_id    | ✅ Thread ID        | ✅ History array   |
 | **Model Selection**               | ✅ Via SDK           | ✅ Via SDK          | ✅ Via SDK         |
 | **MCP Support**                   | ✅ Via SDK           | ✅ Via config.toml  | ✅ Via SDK         |
-| **Agor MCP Integration**          | ✅ Self-hosted       | ✅ Fully wired      | ⚠️ Not wired       |
+| **Agor MCP Integration**          | ✅ Self-hosted       | ✅ Fully wired      | ✅ Fully wired     |
 | **Session Import**                | ✅ JSONL transcripts | ❌ Format unknown   | ❌ Not implemented |
 | **Tool Event Details**            | ✅ Rich metadata     | ✅ Rich metadata    | ✅ 13 event types  |
 | **Interactive Permissions**       | ✅ PreToolUse hook   | ❌ Config-only      | ⚠️ Unknown         |
@@ -182,11 +182,13 @@ All three use official SDKs for programmatic control, streaming, and session man
 - Resumption: Load thread ID from database
 - Status: ✅ Fully working
 
-**Gemini:** `setHistory(contents)` / `getHistory()` API
+**Gemini:** `ChatRecordingService` with automatic persistence
 
-- Storage: Would need to serialize `Content[]` array
-- Resumption: Restore conversation history on new client
-- Status: ❌ Not yet implemented
+- Storage: SDK automatically saves to `~/.gemini/tmp/<project_hash>/chats/session-*.json`
+- Resumption: SDK's `ChatRecordingService` handles session continuity internally
+- API: `client.setHistory()` for manual history loading, SDK auto-persists via recording service
+- Session ID: SDK generates its own session ID (stored in session file, different from Agor's sessionId)
+- Status: ✅ Fully working (SDK manages history automatically)
 
 ---
 
@@ -230,11 +232,13 @@ All three use official SDKs for programmatic control, streaming, and session man
 - Configuration: Agor writes MCP servers to config.toml automatically
 - Status: ✅ Fully wired and working
 
-**Gemini:** ✅ SDK supports MCP
+**Gemini:** ✅ Full support via SDK
 
 - API: `mcpServers: Record<string, MCPServerConfig>` in Config
-- Agor integration: Ready but not yet wired
-- Status: ⚠️ SDK ready, Agor integration pending
+- Agor integration: Session-level MCP server selection with hierarchical scoping (global → repo → session)
+- Features: Includes Agor MCP server for daemon self-access + user-configured MCP servers
+- Unique: Tool filtering (`includeTools`/`excludeTools`), TCP transport, OAuth, service account impersonation
+- Status: ✅ Fully wired and working
 
 ---
 
@@ -390,18 +394,18 @@ interface Session {
 
 ## Agor Integration Status
 
-| Feature                     | Claude Code | Codex            | Gemini               |
-| --------------------------- | ----------- | ---------------- | -------------------- |
-| **Live Execution**          | ✅ Complete | ✅ Complete      | ✅ Complete          |
-| **Streaming UI**            | ✅ Complete | ✅ Complete      | ✅ Complete          |
-| **Permission Modes**        | ✅ Complete | ✅ Complete      | ✅ Complete          |
-| **Mid-Session Mode Change** | ✅ Complete | ✅ Complete      | ⚠️ Needs testing     |
-| **Session Resumption**      | ✅ Complete | ✅ Complete      | ❌ Not implemented   |
-| **Model Selection UI**      | ✅ Complete | ✅ Complete      | ✅ Complete          |
-| **MCP Integration**         | ✅ Complete | ✅ Complete      | ⚠️ Ready (not wired) |
-| **Session Import**          | ✅ Complete | ❌ Deferred      | ❌ Not implemented   |
-| **Tool Visualization**      | ✅ Complete | ⚠️ Basic         | ❌ Not implemented   |
-| **Interactive Approvals**   | ✅ Complete | ❌ Not supported | ⚠️ Unknown           |
+| Feature                     | Claude Code | Codex            | Gemini             |
+| --------------------------- | ----------- | ---------------- | ------------------ |
+| **Live Execution**          | ✅ Complete | ✅ Complete      | ✅ Complete        |
+| **Streaming UI**            | ✅ Complete | ✅ Complete      | ✅ Complete        |
+| **Permission Modes**        | ✅ Complete | ✅ Complete      | ✅ Complete        |
+| **Mid-Session Mode Change** | ✅ Complete | ✅ Complete      | ⚠️ Needs testing   |
+| **Session Resumption**      | ✅ Complete | ✅ Complete      | ✅ Complete        |
+| **Model Selection UI**      | ✅ Complete | ✅ Complete      | ✅ Complete        |
+| **MCP Integration**         | ✅ Complete | ✅ Complete      | ✅ Complete        |
+| **Session Import**          | ✅ Complete | ❌ Deferred      | ❌ Not implemented |
+| **Tool Visualization**      | ✅ Complete | ⚠️ Basic         | ❌ Not implemented |
+| **Interactive Approvals**   | ✅ Complete | ❌ Not supported | ⚠️ Unknown         |
 
 ---
 
@@ -427,6 +431,8 @@ interface Session {
 - **Thought events** - Explicit agent reasoning exposed
 - **Loop detection** - Automatic infinite loop prevention
 - **Context compression** - Automatic context window management
+- **ChatRecordingService** - Built-in session persistence to filesystem
+- **Advanced MCP features** - Tool filtering, TCP transport, OAuth, service account impersonation
 - **ApprovalMode.YOLO** - Most permissive mode name
 
 ---
@@ -449,8 +455,8 @@ interface Session {
 
 ### Gemini Integration Gaps
 
-1. **Session resumption** - Implement history serialization
-2. **MCP wiring** - Connect session MCP server IDs to SDK config
+1. ~~**Session resumption**~~ - ✅ Complete (SDK's ChatRecordingService handles automatically)
+2. ~~**MCP wiring**~~ - ✅ Complete (hierarchical scoping with Agor MCP + user servers)
 3. **Mid-session mode change** - Test if new client required
 4. **Tool visualization** - Build Gemini-specific tool blocks
 5. **Interactive approvals** - Investigate `tool_call_confirmation` handling
