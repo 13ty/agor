@@ -1,6 +1,6 @@
 {
   "name": "Agor Playground (Recommended - Fast npm install)",
-  // Cache bust: 2025-10-30-v1 - API key hot-reload without daemon restart (0.4.9)
+  // Cache bust: 2025-10-30-v2 - Fix Settings modal tab switching bug during onboarding (0.4.9)
   "build": {
     "dockerfile": "playground/Dockerfile",
     "context": "..",

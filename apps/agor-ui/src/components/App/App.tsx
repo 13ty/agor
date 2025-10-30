@@ -518,7 +518,14 @@ export const App: React.FC<AppProps> = ({
         users={users}
         mcpServers={mcpServers}
         activeTab={effectiveSettingsTab}
-        onTabChange={setSettingsActiveTab}
+        onTabChange={newTab => {
+          setSettingsActiveTab(newTab);
+          // Clear openSettingsTab when user manually changes tabs
+          // This allows normal tab switching after opening from onboarding
+          if (openSettingsTab) {
+            onSettingsClose?.();
+          }
+        }}
         onCreateBoard={onCreateBoard}
         onUpdateBoard={onUpdateBoard}
         onDeleteBoard={onDeleteBoard}
