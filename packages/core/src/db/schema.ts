@@ -1,4 +1,11 @@
-import type { Message, PermissionMode, Session, Task } from '@agor/core/types';
+import type {
+  CodexApprovalPolicy,
+  CodexSandboxMode,
+  Message,
+  PermissionMode,
+  Session,
+  Task,
+} from '@agor/core/types';
 import { sql } from 'drizzle-orm';
 import { index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
@@ -71,7 +78,11 @@ export const sessions = sqliteTable(
         // Permission config (session-level tool approvals)
         permission_config?: {
           allowedTools?: string[];
-          mode?: PermissionMode;
+          mode?: PermissionMode; // For Claude/Gemini
+          codex?: {
+            sandboxMode: CodexSandboxMode;
+            approvalPolicy: CodexApprovalPolicy;
+          };
         };
 
         // Model config (session-level model selection)
