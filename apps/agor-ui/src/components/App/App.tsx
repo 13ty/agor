@@ -402,7 +402,8 @@ export const App: React.FC<AppProps> = ({
         currentBoardName={currentBoard?.name}
         currentBoardIcon={currentBoard?.icon}
         unreadCommentsCount={
-          comments.filter(c => c.board_id === currentBoardId && !c.resolved).length
+          comments.filter(c => c.board_id === currentBoardId && !c.resolved && !c.parent_comment_id)
+            .length
         }
       />
       <Content style={{ position: 'relative', overflow: 'hidden', display: 'flex' }}>
