@@ -81,7 +81,11 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
     const updatedWorktree = (await super.patch(id, data, params)) as Worktree;
 
     // Handle board_objects changes if board_id changed
-    if (boardIdProvided && oldBoardId !== newBoardId) {
+    if (!boardIdProvided) {
+      return updatedWorktree;
+    }
+
+    if (oldBoardId !== newBoardId) {
       const boardObjectsService = this.app.service('board-objects') as unknown as {
         findByWorktreeId: (worktreeId: WorktreeID) => Promise<BoardEntityObject | null>;
         create: (data: Partial<BoardEntityObject>) => Promise<BoardEntityObject>;
