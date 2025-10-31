@@ -1434,11 +1434,14 @@ const SessionCanvas = ({
         panOnDrag={activeTool === 'select'}
         className={`tool-mode-${activeTool}`}
         // Disable React Flow's default keyboard shortcuts to prevent conflicts
+        // Note: React Flow keyboard shortcuts were causing Spatial Messages to appear
+        // undesirably when clicking/typing. Disabling all keyboard shortcuts for now.
         deleteKeyCode={null}
         selectionKeyCode={null}
         multiSelectionKeyCode={null}
         panActivationKeyCode={null}
         zoomActivationKeyCode={null}
+        disableKeyboardA11y={true}
       >
         <Background />
         <Controls position="top-left" showInteractive={false}>
