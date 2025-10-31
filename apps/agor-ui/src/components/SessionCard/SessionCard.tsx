@@ -11,9 +11,10 @@ import {
   PushpinFilled,
   SettingOutlined,
 } from '@ant-design/icons';
-import { App, Badge, Button, Card, Collapse, Space, Spin, Tag, Typography } from 'antd';
+import { App, Button, Card, Collapse, Space, Tag, Typography } from 'antd';
 import { CreatedByTag } from '../metadata';
 import TaskListItem from '../TaskListItem';
+import { TaskStatusIcon } from '../TaskStatusIcon';
 import { ToolIcon } from '../ToolIcon';
 
 const SESSION_CARD_MAX_WIDTH = 560;
@@ -103,7 +104,7 @@ const SessionCard = ({
             type="text"
             icon={<PlusCircleOutlined />}
             size="small"
-            onClick={(e) => {
+            onClick={e => {
               e.stopPropagation();
               onSessionClick?.();
             }}
@@ -113,7 +114,7 @@ const SessionCard = ({
         </div>
       )}
 
-      {visibleTasks.map((task) => (
+      {visibleTasks.map(task => (
         <TaskListItem key={task.task_id} task={task} onClick={() => onTaskClick?.(task.task_id)} />
       ))}
     </div>
@@ -145,19 +146,7 @@ const SessionCard = ({
           <Typography.Text strong className="nodrag">
             {session.agentic_tool}
           </Typography.Text>
-          {session.status === TaskStatus.RUNNING ? (
-            <Spin size="small" />
-          ) : (
-            <Badge
-              status={
-                session.status === TaskStatus.COMPLETED
-                  ? 'success'
-                  : session.status === TaskStatus.FAILED
-                    ? 'error'
-                    : 'default'
-              }
-            />
-          )}
+          <TaskStatusIcon status={session.status} size={16} />
         </Space>
 
         <Space size={4}>
@@ -176,7 +165,7 @@ const SessionCard = ({
               <Tag
                 icon={<PushpinFilled />}
                 color="blue"
-                onClick={(e) => {
+                onClick={e => {
                   e.stopPropagation();
                   onUnpin?.(session.session_id);
                 }}
@@ -200,7 +189,7 @@ const SessionCard = ({
                 type="text"
                 size="small"
                 icon={<ExpandOutlined />}
-                onClick={(e) => {
+                onClick={e => {
                   e.stopPropagation();
                   onSessionClick();
                 }}
@@ -212,7 +201,7 @@ const SessionCard = ({
                 type="text"
                 size="small"
                 icon={<SettingOutlined />}
-                onClick={(e) => {
+                onClick={e => {
                   e.stopPropagation();
                   onOpenSettings(session.session_id);
                 }}
@@ -224,7 +213,7 @@ const SessionCard = ({
                 type="text"
                 size="small"
                 icon={<CloseOutlined />}
-                onClick={(e) => {
+                onClick={e => {
                   e.stopPropagation();
                   handleDelete();
                 }}

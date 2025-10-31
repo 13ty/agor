@@ -347,8 +347,8 @@ const SessionDrawer = ({
   const isForked = !!session.genealogy.forked_from_session_id;
   const isSpawned = !!session.genealogy.parent_session_id;
 
-  // Check if session is currently running (disable prompts to avoid confusion)
-  const isRunning = session.status === TaskStatus.RUNNING;
+  // Check if session is currently running or stopping (disable prompts to avoid confusion)
+  const isRunning = session.status === TaskStatus.RUNNING || session.status === TaskStatus.STOPPING;
 
   // Get repo from worktree (worktree is passed from parent)
   const repo = worktree ? repos.find(r => r.repo_id === worktree.repo_id) : null;
