@@ -1,0 +1,80 @@
+---
+title: Agor MCP Server
+description: How Agor’s built-in Model Context Protocol server unlocks self-aware agents and deep automation inside your workspace.
+---
+
+# Agor MCP Server
+
+Agor ships with an **internal Model Context Protocol (MCP) server**. The same daemon that serves REST and WebSocket APIs also exposes MCP, giving agents and external tools full parity with what a user can do in the UI or CLI—without shelling out or scraping text.
+
+## Key Ideas
+
+- **First-class automation surface:** MCP tools wrap FeathersJS services, so anything you can click or run via CLI is available as a structured JSON-RPC call.
+- **Self-aware agents:** Sessions automatically receive an MCP token scoped to their worktree/board, letting the agent understand where it is and take contextual action.
+- **Remote access when needed:** External agents can connect over HTTP to orchestrate Agor, creating boards, worktrees, or even new user accounts.
+
+> MCP is enabled by default—no extra servers to run—and every session already has credentials injected.
+
+## Capabilities At a Glance
+
+| Domain | What agents can do |
+| --- | --- |
+| **Sessions** | Introspect the current session, list siblings, spawn child sessions with prompts, archive/complete work |
+| **Worktrees & Boards** | List or fetch worktrees, create new ones, assign them to boards, update metadata, move cards spatially |
+| **Tasks & Reports** | Fetch task history, create follow-up tasks, log progress, generate reports |
+| **Users & Teams** | Create users, update profiles or avatars, assign roles, invite collaborators |
+| **Context Resources** | Enumerate context files, load concept docs, ingest repo metadata |
+
+Because tools route through FeathersJS services, every action emits the same events the UI listens to—real-time updates appear instantly for everyone watching the board.
+
+## Self-Aware Agents Inside Agor
+
+When you launch a session in Agor, the SDK config includes the internal MCP server automatically:
+
+```json
+{
+  "type": "http",
+  "url": "http://localhost:3030/mcp?sessionToken=…"
+}
+```
+
+From there agents can:
+
+- Discover their **current session** and worktree context.
+- **Spawn subsessions** to fan out work (e.g., spin up multiple coders to process a checklist).
+- Inspect the **board layout** to decide where to place new worktrees or sessions.
+- Update their own **user profile** to signal who is speaking.
+
+This self-awareness is what lets agents behave like team members instead of detached copilots.
+
+## Automation Examples
+
+- **Mass subsession fan-out:** “Read `context/js-to-ts-refactor`, split the file list, create a subsession per chunk, and report back when done.”
+- **Bulk account provisioning:** Paste a CSV of emails; the agent calls MCP to create users and invite them automatically.
+- **Issue triage pipeline:** Source GitHub issues by label, triage them, and create worktrees linked to each issue, dropping them onto the active board as cards.
+- **Environment orchestration:** Start/stop worktree environments via MCP before delegating work to collaborators or other agents.
+
+Because MCP calls are just JSON-RPC, complex workflows can be scripted once and reused by any tool that speaks the protocol.
+
+## External Agent Access
+
+External agents can use the same MCP endpoint:
+
+1. Obtain an authenticated token (session token for scoped access today; broader API tokens are planned).
+2. Connect over HTTP/SSE to `http(s)://<daemon-host>:<port>/mcp`.
+3. Call the same tools internal agents use—no separate API surface required.
+
+This makes Agor a control plane for other AI systems, enabling remote triage bots, automation pipelines, or custom dashboards to work against live boards.
+
+## Best Practices
+
+- **Keep permission policies tight.** MCP calls respect Agor’s permission system—configure approvals so agents only do what the team expects.
+- **Design idempotent workflows.** Make repeated calls safe; agents may retry when handling errors.
+- **Log agent activity.** Sessions capture every MCP action they trigger, making reviews and audits straightforward.
+- **Reuse concept files.** Agents can load `context/` docs via MCP, ensuring automations stay aligned with team conventions.
+
+## Related Reading
+
+- [Architecture Guide: Agor as an MCP Server](./architecture#agor-as-an-mcp-server)
+- [Agent SDK Comparison](./sdk-comparison)
+- Context concept: `context/concepts/mcp-integration.md`

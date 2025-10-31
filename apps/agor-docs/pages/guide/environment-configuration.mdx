@@ -22,7 +22,7 @@ Agor lets you define start/stop/health/app commands at the **repository level**,
 2. **Stop command fully tears down the stack.** Make sure it is idempotent (`docker compose down`, `systemctl stop`, etc.).
 3. **Optional health check URL.** Agor pings this endpoint to display the green “Running” badge and to catch regressions.
 4. **App URL.** Becomes a clickable link once the environment is healthy.
-5. **No port or namespace conflicts.** Use templated offsets or namespacing flags so multiple worktrees can run simultaneously.
+5. **No port or namespace conflicts.** Use templated offsets or namespacing flags so multiple worktrees can run simultaneously (for Docker Compose, pass `-p {{worktree.name}}` or similar to isolate container/network names).
 
 ## Template Building Blocks
 
@@ -39,9 +39,11 @@ Because the template is stored **at the repo level**, updating it in the Environ
 
 ## Example: Agor with Docker Compose
 
-<img src="/screenshots/environment_set_up.png" alt="Agor Worktree Environment template with templated Docker commands" style={{ width: '100%', borderRadius: '8px' }} />
+![Agor Worktree Environment template with templated Docker commands](/screenshots/environment_set_up.png)
 
-```text title="Repository Environment Template"
+**Repository Environment Template**
+
+```text
 Up Command
 DAEMON_PORT={{add 3050 worktree.unique_id}} UI_PORT={{add 5050 worktree.unique_id}} docker compose -p {{worktree.name}} up -d
 
