@@ -666,7 +666,7 @@ export const boardComments = sqliteTable(
       onDelete: 'set null',
     }),
     worktree_id: text('worktree_id', { length: 36 }).references(() => worktrees.worktree_id, {
-      onDelete: 'set null',
+      onDelete: 'cascade',
     }),
 
     // Content (materialized for display)

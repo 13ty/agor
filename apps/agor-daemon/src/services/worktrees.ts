@@ -193,24 +193,27 @@ export class WorktreesService extends DrizzleService<Worktree, Partial<Worktree>
     // Get worktree details before deletion
     const worktree = await this.get(id, params);
 
-    // If deleteFromFilesystem is true, remove from filesystem first
+    // Remove from database FIRST for instant UI feedback
+    // CASCADE will clean up related comments automatically
+    const result = await super.remove(id, params);
+
+    // Then remove from filesystem (slower operation, happens in background)
     if (deleteFromFilesystem) {
-      try {
-        const repo = (await this.app.service('repos').get(worktree.repo_id)) as Repo;
-        console.log(`🗑️  Removing worktree from filesystem: ${worktree.path}`);
-        await removeWorktree(repo.local_path, worktree.path);
-        console.log(`✅ Worktree removed from filesystem successfully`);
-      } catch (error) {
-        console.error(
-          `⚠️  Failed to remove worktree from filesystem:`,
-          error instanceof Error ? error.message : String(error)
-        );
-        // Continue with database deletion even if filesystem deletion fails
-      }
+      // Note: We don't await this - it happens asynchronously after DB deletion
+      const repo = (await this.app.service('repos').get(worktree.repo_id)) as Repo;
+      console.log(`🗑️  Removing worktree from filesystem: ${worktree.path}`);
+      removeWorktree(repo.local_path, worktree.path)
+        .then(() => {
+          console.log(`✅ Worktree removed from filesystem successfully`);
+        })
+        .catch(error => {
+          console.error(
+            `⚠️  Failed to remove worktree from filesystem:`,
+            error instanceof Error ? error.message : String(error)
+          );
+        });
     }
 
-    // Remove from database - cast since we're removing a single item by ID
-    const result = await super.remove(id, params);
     return result as Worktree;
   }
 
