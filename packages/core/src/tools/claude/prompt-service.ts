@@ -15,7 +15,7 @@ import type { PermissionService } from '../../permissions/permission-service';
 import type { SessionID, TaskID } from '../../types';
 import { MessageRole } from '../../types';
 import type { SessionsService, TasksService } from './claude-tool';
-import { SDKMessageProcessor, type ProcessedEvent } from './message-processor';
+import { type ProcessedEvent, SDKMessageProcessor } from './message-processor';
 import { setupQuery } from './query-builder';
 
 export interface PromptResult {

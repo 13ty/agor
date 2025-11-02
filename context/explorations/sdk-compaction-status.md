@@ -24,12 +24,14 @@ The Claude Agent SDK includes **automatic context compaction** to prevent runnin
 > "The compact feature automatically summarizes previous messages when the context limit approaches, so your agent won't run out of context."
 
 **How It Works:**
+
 1. Agent conversation grows over time (user prompts + tool results + assistant responses)
 2. Token count approaches model's context window limit
 3. SDK **automatically triggers compaction** to summarize older messages
 4. Agent continues working with freed-up context space
 
 **Best Practices (from Anthropic):**
+
 - Use explicit compaction for long-running tasks
 - Summarize or checkpoint memory to avoid context blowups
 - Rely on SDK's automatic compaction for graceful degradation
@@ -41,6 +43,7 @@ The Claude Agent SDK includes **automatic context compaction** to prevent runnin
 ### Event Structure
 
 **Logged Event:**
+
 ```javascript
 {
   type: 'system',
@@ -52,6 +55,7 @@ The Claude Agent SDK includes **automatic context compaction** to prevent runnin
 ```
 
 **Location in Logs:**
+
 ```
 [daemon] ℹ️   SDK system message: { ... }
 ```
@@ -91,6 +95,7 @@ private handleSystem(msg: SDKSystemMessage | SDKCompactBoundaryMessage): Process
 ```
 
 **Current Behavior:**
+
 - ✅ Logs to console
 - ❌ Does NOT emit any `ProcessedEvent`
 - ❌ Does NOT persist to database
@@ -101,13 +106,14 @@ private handleSystem(msg: SDKSystemMessage | SDKCompactBoundaryMessage): Process
 
 We currently handle two system message subtypes:
 
-| Subtype            | Purpose                   | Display? | Persist? |
-| ------------------ | ------------------------- | -------- | -------- |
-| `compact_boundary` | Memory management marker  | ❌       | ❌       |
-| `init`             | Session initialization    | ❌       | ❌       |
-| `status`           | Runtime status updates    | ❌       | ❌       |
+| Subtype            | Purpose                  | Display? | Persist? |
+| ------------------ | ------------------------ | -------- | -------- |
+| `compact_boundary` | Memory management marker | ❌       | ❌       |
+| `init`             | Session initialization   | ❌       | ❌       |
+| `status`           | Runtime status updates   | ❌       | ❌       |
 
 **Note:** `compact_boundary` vs `status='compacting'` are **different events**:
+
 - `compact_boundary`: Marker for where compaction occurred in message history
 - `status='compacting'`: Real-time status update that compaction is happening NOW
 
@@ -118,6 +124,7 @@ We currently handle two system message subtypes:
 ### User Impact
 
 **Users currently have NO visibility into:**
+
 1. When their agent is compacting context
 2. Why there might be a pause in response generation
 3. That older conversation context is being summarized
@@ -126,12 +133,14 @@ We currently handle two system message subtypes:
 ### UX Anti-Pattern
 
 **Silent Degradation:**
+
 - Agent pauses to compact context
 - User sees no feedback
 - User may think agent is stuck or unresponsive
 - User interrupts or restarts unnecessarily
 
 **Missing Context:**
+
 - Users don't understand why conversation history seems "fuzzy"
 - No indication that older messages were summarized
 - Confusion when agent "forgets" earlier details
@@ -145,6 +154,7 @@ We currently handle two system message subtypes:
 **Imported from:** `@anthropic-ai/claude-agent-sdk/sdk`
 
 **Observed Structure:**
+
 ```typescript
 interface SDKSystemMessage {
   type: 'system';
@@ -167,6 +177,7 @@ interface SDKSystemMessage {
 ```
 
 **Other Possible Status Values?**
+
 - Unknown - SDK documentation doesn't enumerate all `status` values
 - Likely others: `'idle'`, `'thinking'`, `'running'`, etc.
 - Need to observe in practice and handle gracefully
@@ -187,6 +198,7 @@ Based on user feedback: Keep it simple! Display as an **agent message** (bubble 
 ### Event Flow
 
 **Status Message Event** (compaction starts):
+
 ```
 SDK: { type: 'system', subtype: 'status', status: 'compacting', session_id: '...' }
   ↓
@@ -198,6 +210,7 @@ UI: Renders as agent bubble with <Spin />
 ```
 
 **Compaction Complete** (next message_start or result):
+
 ```
 SDK: { type: 'system', subtype: 'compact_boundary' } (marker)
   ↓
@@ -373,16 +386,19 @@ const systemStatus = isSystem && Array.isArray(message.content)
 ### Should We Persist System Messages?
 
 **Arguments FOR persisting:**
+
 - ✅ Historical record of agent behavior
 - ✅ Debugging aid (understand when/why compaction happened)
 - ✅ Analytics (how often do sessions hit compaction?)
 
 **Arguments AGAINST persisting:**
+
 - ❌ Clutters message table with ephemeral events
 - ❌ Not part of "conversation" - just system state
 - ❌ No replay value (compaction is point-in-time)
 
 **Recommendation:** **Don't persist** as Message records. Instead:
+
 - Broadcast via WebSocket for real-time UI updates
 - Optionally log to separate `system_events` table for analytics
 - Include in session metadata (e.g., `compaction_count`)
@@ -405,6 +421,7 @@ Beyond `'compacting'`, we might see:
 ## Implementation Checklist
 
 ### Phase 1: Core Event Handling
+
 - [ ] Add `system_status` to `ProcessedEvent` union type
 - [ ] Update `handleSystem()` in message-processor.ts
 - [ ] Add WebSocket broadcast in prompt-service.ts
@@ -412,6 +429,7 @@ Beyond `'compacting'`, we might see:
 - [ ] Test with compaction trigger (long conversation)
 
 ### Phase 2: UI Implementation
+
 - [ ] Add system status badge to session/task header
 - [ ] Create `SystemStatusBlock` component for inline display
 - [ ] Add compaction icon (SyncOutlined or CompressOutlined)
@@ -419,12 +437,14 @@ Beyond `'compacting'`, we might see:
 - [ ] Handle status clearing when compaction completes
 
 ### Phase 3: Analytics & Metrics
+
 - [ ] Track compaction events in session metadata
 - [ ] Add `compaction_count` to Session type
 - [ ] Display in session details drawer
 - [ ] Consider adding to session list (e.g., "⚡ Compacted 3x")
 
 ### Phase 4: Documentation
+
 - [ ] Update agent-integration.md with system status events
 - [ ] Update conversation-ui.md with system message patterns
 - [ ] Update websockets.md with new event type
@@ -461,11 +481,13 @@ Beyond `'compacting'`, we might see:
 ### Existing System Message Handling
 
 **Thinking Blocks** (`context/explorations/thinking-mode.md`):
+
 - Real-time streaming via `thinking:chunk` events
 - Persistent storage as `thinking` content blocks
 - Dedicated UI component (`ThinkingBlock.tsx`)
 
 **Permission Requests** (`context/concepts/permissions.md`):
+
 - Interactive system messages
 - Persist as `permission_request` message type
 - Dedicated UI component (`PermissionRequestBlock.tsx`)
@@ -477,12 +499,14 @@ Beyond `'compacting'`, we might see:
 ## Success Criteria
 
 **User Experience:**
+
 - ✅ Users understand when compaction is happening
 - ✅ No confusion about pauses during long conversations
 - ✅ Educational - users learn what compaction is and why it's needed
 - ✅ Non-intrusive - doesn't clutter conversation unnecessarily
 
 **Technical:**
+
 - ✅ Events reliably captured from SDK
 - ✅ Real-time broadcast to connected clients
 - ✅ Graceful handling of unknown status values

@@ -19,9 +19,10 @@ import {
 } from '@agor/core/types';
 import { RobotOutlined } from '@ant-design/icons';
 import { Bubble } from '@ant-design/x';
-import { Avatar, Space, Spin, theme, Typography } from 'antd';
+import { Avatar, Space, Spin, Typography, theme } from 'antd';
 
 const { Text } = Typography;
+
 import type React from 'react';
 import { MarkdownRenderer } from '../MarkdownRenderer';
 import { PermissionRequestBlock } from '../PermissionRequestBlock';
