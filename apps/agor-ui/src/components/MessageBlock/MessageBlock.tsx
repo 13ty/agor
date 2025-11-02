@@ -74,6 +74,45 @@ interface MessageBlockProps {
   ) => void;
 }
 
+/**
+ * Check if this is a Task tool prompt message (agent-generated, appears as user message)
+ *
+ * Task tool prompts are user role messages with array content containing text blocks.
+ * These are NOT real user messages - they're the prompts the agent sends to subsessions.
+ */
+function isTaskToolPrompt(message: Message): boolean {
+  // Must be user role
+  if (message.role !== 'user') return false;
+
+  // Must have array content (not string)
+  if (!Array.isArray(message.content)) return false;
+
+  // Must have at least one text block (not tool_result)
+  const hasTextBlock = message.content.some(block => block.type === 'text');
+  const hasOnlyTextBlocks = message.content.every(
+    block => block.type === 'text' || block.type === 'thinking'
+  );
+
+  // If it has text blocks and NO tool_result blocks, it's likely a Task prompt
+  return hasTextBlock && hasOnlyTextBlocks;
+}
+
+/**
+ * Check if this is a Task tool result message (should display as agent message)
+ */
+function isTaskToolResult(message: Message): boolean {
+  // Must be user role with array content
+  if (message.role !== 'user' || !Array.isArray(message.content)) return false;
+
+  // Check if contains tool_result block
+  // Note: We can't easily determine if it's specifically a Task result here,
+  // but groupMessagesIntoBlocks ensures only Task results reach this as non-chain messages
+  const hasToolResult = message.content.some(block => block.type === 'tool_result');
+
+  // User messages with tool_results that aren't in agent chains are likely Task results
+  return hasToolResult;
+}
+
 export const MessageBlock: React.FC<MessageBlockProps> = ({
   message,
   users = [],
@@ -127,7 +166,14 @@ export const MessageBlock: React.FC<MessageBlockProps> = ({
     );
   }
 
-  const isUser = message.role === 'user';
+  // Check if this is a Task tool prompt or result (agent-generated, but has user role)
+  const isTaskPrompt = isTaskToolPrompt(message);
+  const isTaskResult = isTaskToolResult(message);
+
+  // Determine if this should be displayed as user or agent message
+  const isUser = message.role === 'user' && !isTaskPrompt && !isTaskResult;
+  const isAgent = message.role === 'assistant' || isTaskPrompt || isTaskResult;
+
   // Check if message is currently streaming
   const isStreaming = 'isStreaming' in message && message.isStreaming === true;
 
@@ -138,7 +184,7 @@ export const MessageBlock: React.FC<MessageBlockProps> = ({
     typeof message.content === 'string'
       ? message.content.trim().length > 0
       : Array.isArray(message.content) && message.content.length > 0;
-  const isLoading = isTaskRunning && !hasContent && message.role === 'assistant';
+  const isLoading = isTaskRunning && !hasContent && isAgent;
   const shouldUseTyping = isStreaming && hasContent;
 
   // Get current user's emoji
@@ -164,9 +210,11 @@ export const MessageBlock: React.FC<MessageBlockProps> = ({
 
     // Handle string content
     if (typeof message.content === 'string') {
+      // Add Task tool prefix if this is a Task prompt
+      const content = isTaskPrompt ? `[Task Tool]\n${message.content}` : message.content;
       return {
         thinkingBlocks: [],
-        textBeforeTools: [message.content],
+        textBeforeTools: [content],
         toolBlocks: [],
         textAfterTools: [],
       };
@@ -184,7 +232,13 @@ export const MessageBlock: React.FC<MessageBlockProps> = ({
           const text = (block as unknown as ThinkingContentBlock).text;
           thinkingBlocks.push(text);
         } else if (block.type === 'text') {
-          const text = (block as unknown as TextBlock).text;
+          let text = (block as unknown as TextBlock).text;
+
+          // Add Task tool prefix to the first text block if this is a Task prompt
+          if (isTaskPrompt && textBeforeTools.length === 0 && !hasSeenTool) {
+            text = `[Task Tool]\n${text}`;
+          }
+
           if (hasSeenTool) {
             textAfterTools.push(text);
           } else {
@@ -192,11 +246,44 @@ export const MessageBlock: React.FC<MessageBlockProps> = ({
           }
         } else if (block.type === 'tool_use') {
           const toolUse = block as unknown as ToolUseBlock;
-          toolUseMap.set(toolUse.id, toolUse);
-          hasSeenTool = true;
+
+          // Special handling: Task tools display as text, not tool blocks
+          if (toolUse.name === 'Task') {
+            const subagentType = toolUse.input.subagent_type || 'Task';
+            const description = toolUse.input.description || '';
+            const taskText = `🔧 **Task (${subagentType}):** ${description}`;
+
+            if (hasSeenTool) {
+              textAfterTools.push(taskText);
+            } else {
+              textBeforeTools.push(taskText);
+            }
+          } else {
+            // Regular tools go into tool map
+            toolUseMap.set(toolUse.id, toolUse);
+            hasSeenTool = true;
+          }
         } else if (block.type === 'tool_result') {
           const toolResult = block as unknown as ToolResultBlock;
           toolResultMap.set(toolResult.tool_use_id, toolResult);
+
+          // Special handling: If this is a Task tool result (user message rendered as agent),
+          // extract text content and display it
+          if (isTaskResult) {
+            let resultText = '';
+            if (typeof toolResult.content === 'string') {
+              resultText = toolResult.content;
+            } else if (Array.isArray(toolResult.content)) {
+              resultText = toolResult.content
+                .filter(b => b.type === 'text')
+                .map(b => (b as { text: string }).text)
+                .join('\n');
+            }
+
+            if (resultText.trim()) {
+              textBeforeTools.push(resultText);
+            }
+          }
         }
       }
 

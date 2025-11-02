@@ -273,6 +273,199 @@ Works best with Claude Code due to richer tool metadata.
 
 ---
 
+## Advanced Claude Code SDK Features
+
+Claude Code's Agent SDK exposes several advanced features that Agor fully supports. These are **Claude-exclusive** and not available in Codex or Gemini integrations.
+
+### Task Tool & Nested Operations
+
+**What it is:** The `Task` tool spawns subsessions (e.g., Explore, Plan agents) to handle complex multi-step operations autonomously.
+
+**Agor Implementation:**
+- **Nested operation tracking** - Captures `parent_tool_use_id` from SDK to link child operations (Read, Grep, etc.) to parent Task invocation
+- **Chronological grouping** - Task nested blocks appear exactly where the parent Task was called, not at the bottom
+- **Collapsed by default** - Shows summary (tool count, success/error stats) when collapsed
+- **Expandable inspection** - Click to see full tool chain executed inside the subsession
+- **Purple visual treatment** - Distinct styling to differentiate from regular tool chains
+
+**UI Display:**
+```
+┌─────────────────────────────────────────────┐
+│ ⚡ Explore · Find session settings modal    │
+│ 3 tools · Read, Grep · ✓ 3                  │
+│ Found SessionSettingsModal in src/...       │ [Collapsed]
+└─────────────────────────────────────────────┘
+
+When expanded:
+  ├─ Read: src/components/SessionSettingsModal.tsx
+  ├─ Grep: "Custom Context" in **/*.tsx
+  └─ Read: src/pages/Settings.tsx
+```
+
+**Database Storage:** `messages.parent_tool_use_id` links all nested operations to their spawning Task tool use ID.
+
+---
+
+### Extended Thinking Mode
+
+**What it is:** Allocates additional tokens for Claude to use an internal "scratchpad" for reasoning through complex problems before generating responses.
+
+**Agor Implementation:**
+- **Auto Mode (Default)** - Detects keywords in prompts:
+  - `think` → 4,000 tokens
+  - `think hard`, `think deeply` → 10,000 tokens
+  - `think harder`, `ultrathink` → 31,999 tokens
+- **Manual Mode** - Set explicit budget (0-32k) in session settings
+- **Off Mode** - Disable thinking to save costs
+- **Real-time streaming** - Thinking blocks stream token-by-token via WebSocket (`thinking:chunk` events)
+
+**Example Prompts:**
+```
+"think about the best architecture for this feature"
+"think hard about potential edge cases before implementing"
+"ultrathink this critical database migration strategy"
+```
+
+**UI Display:** Thinking blocks appear as separate content blocks in messages, visually distinct from response text. Rendered with gray background and "🧠 Thinking..." header.
+
+**Cost Consideration:** Extended thinking uses additional input tokens. Use judiciously for complex tasks where reasoning quality matters.
+
+---
+
+### TodoWrite Tool & Sticky Display
+
+**What it is:** Claude can create structured task lists to track progress during complex implementations.
+
+**Agor Implementation:**
+- **Real-time updates** - Todo status changes stream live via WebSocket
+- **Sticky display** - Latest todo **always visible** at bottom of running task, above typing indicator
+- **Visual states:**
+  - ⏳ **Pending** - Not started yet
+  - ⚙️ **In Progress** - Currently working (spinning icon)
+  - ✅ **Completed** - Done
+- **Automatic cleanup** - Completed todos collapse after a few seconds
+- **Historical view** - All todos preserved in message history
+
+**UI Display:**
+```
+Current Task:
+┌─────────────────────────────────────────┐
+│ ⚙️ Implementing database migration      │  ← Always visible
+└─────────────────────────────────────────┘
+
+[Typing indicator appears below]
+```
+
+**Best Practice:** TodoWrite tool activates automatically for multi-step tasks. Users can see exactly what Claude is working on in real-time.
+
+---
+
+### Permission Scopes
+
+**What it is:** Granular control over tool approvals with three scope levels.
+
+**Agor Implementation:**
+- **Once** - Approve this single tool execution
+- **Session** - Approve all future uses of this tool in the current session
+- **Repo/Project** - Approve all future uses of this tool in the current repository
+
+**UI Display:**
+```
+┌─────────────────────────────────────────────────┐
+│ Claude wants to run: npm install               │
+│                                                 │
+│ Scope:                                          │
+│  ○ Once                                         │
+│  ● Session  ← Selected                          │
+│  ○ Repo                                         │
+│                                                 │
+│ [Approve] [Deny]                                │
+└─────────────────────────────────────────────────┘
+```
+
+**Database Storage:** `permission_requests` table tracks scope decisions. Repo-level permissions stored in `repo_settings`.
+
+**Permission Modes:**
+- `'ask'` - Prompt for every tool use (default)
+- `'auto'` - Auto-approve with scope rules applied
+- `'allow-all'` - Never prompt (dangerous, use with caution)
+
+---
+
+### Real-Time Tool Execution Indicators
+
+**What it is:** Live feedback when tools are executing, before results are available.
+
+**Agor Implementation:**
+- **WebSocket events** - `tool:executing` events broadcast when tools start
+- **Visual indicators** - Spinning icons next to tool names
+- **Multiple tools** - Shows all concurrently executing tools
+- **Dismisses automatically** - When tool results arrive
+
+**UI Display:**
+```
+⚙️ Running tools:
+  • Read src/components/TaskBlock.tsx
+  • Grep "parent_tool_use_id" in **/*.ts
+```
+
+**Why it matters:** For long-running tools (Bash commands, large file reads), users see progress immediately instead of staring at typing indicator.
+
+---
+
+### AgentChain Visualization
+
+**What it is:** Groups consecutive tool-only messages into collapsed chains, hiding implementation details unless user wants to inspect.
+
+**Agor Implementation:**
+- **Auto-grouping** - 3+ consecutive messages with only tools/thinking → collapsed chain
+- **Summary display** - Shows tool count and types when collapsed
+- **Expandable** - Click to see full tool execution sequence
+- **Mixed messages** - If assistant adds text response, chain breaks and text displays normally
+
+**UI Display:**
+```
+┌─────────────────────────────────────────┐
+│ 🔗 Agent Operations (5 tools)           │  [Collapsed]
+│ Read, Edit, Bash, Grep, Write           │
+└─────────────────────────────────────────┘
+
+When expanded:
+  ├─ Read: src/types/Message.ts
+  ├─ Edit: Added parent_tool_use_id field
+  ├─ Grep: "parent_tool_use_id" in **/*.ts
+  ├─ Write: TaskNestedBlock.tsx (NEW)
+  └─ Bash: pnpm build
+```
+
+**Progressive disclosure:** Users see high-level progress by default, can drill into details when debugging or learning.
+
+---
+
+### Other Claude-Exclusive Features in Agor
+
+**Rich Tool Metadata:**
+- Detailed `tool_use` objects with ID, name, input parameters
+- Tool result blocks with structured content types
+- Enables sophisticated visualizations (file diffs, syntax highlighting)
+
+**Git State Tracking:**
+- SDK automatically captures branch, commit SHA, dirty state
+- Displayed in task metadata pills
+- No manual git querying needed
+
+**Session Import/Export:**
+- Parse Claude Code JSONL transcripts from `~/.claude/projects/`
+- Replay sessions in Agor
+- Full fidelity preservation of tool uses, timestamps, git state
+
+**MCP Integration:**
+- First-class MCP server support
+- Session-level MCP server selection
+- Agor UI for managing MCP configs
+
+---
+
 ## Choosing an Agent
 
 ### Use Claude Code when:

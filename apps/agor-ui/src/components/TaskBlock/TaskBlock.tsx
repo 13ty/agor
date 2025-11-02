@@ -103,6 +103,16 @@ function isAgentChainMessage(message: Message): boolean {
     const hasThinking = message.content.some(block => block.type === 'thinking');
     const hasText = message.content.some(block => block.type === 'text');
 
+    // SPECIAL: Task tools should display as regular agent messages, not in chain
+    const hasOnlyTaskTool =
+      message.content.length === 1 &&
+      message.content[0].type === 'tool_use' &&
+      (message.content[0] as { name?: string }).name === 'Task';
+
+    if (hasOnlyTaskTool) {
+      return false; // Show as regular message bubble
+    }
+
     // If it has tools BUT ALSO has text, treat as mixed message
     // We'll split it: tools go to AgentChain, text goes to MessageBlock
     if (hasTools && hasText) {
@@ -123,17 +133,72 @@ function isAgentChainMessage(message: Message): boolean {
  * Group messages into blocks:
  * - Consecutive assistant messages with thoughts/tools → AgentChain
  * - User messages and assistant text responses → individual MessageBlocks
+ * - Task tool nested operations → AgentChain (grouped by parent_tool_use_id)
  * - Permission requests are now just messages, rendered inline naturally
  */
 function groupMessagesIntoBlocks(messages: Message[]): Block[] {
+  // Separate top-level messages from nested (parent_tool_use_id)
+  const topLevel = messages.filter(m => !m.parent_tool_use_id);
+  const nested = messages.filter(m => m.parent_tool_use_id);
+
+  // Collect all Task tool use IDs for special handling
+  const taskToolIds = new Set<string>();
+  for (const msg of messages) {
+    if (Array.isArray(msg.content)) {
+      for (const block of msg.content) {
+        if (block.type === 'tool_use' && (block as { name?: string }).name === 'Task') {
+          taskToolIds.add((block as { id?: string }).id || '');
+        }
+      }
+    }
+  }
+
+  // Group nested messages by parent tool use ID
+  const nestedByParent = new Map<string, Message[]>();
+  for (const msg of nested) {
+    if (!msg.parent_tool_use_id) continue;
+    if (!nestedByParent.has(msg.parent_tool_use_id)) {
+      nestedByParent.set(msg.parent_tool_use_id, []);
+    }
+    nestedByParent.get(msg.parent_tool_use_id)!.push(msg);
+  }
+
+  // Build map of tool_use_id -> tool_result message for Task tools
+  const taskResultsByToolId = new Map<string, Message>();
+  for (const msg of topLevel) {
+    if (msg.role === MessageRole.USER && Array.isArray(msg.content)) {
+      for (const block of msg.content) {
+        if (block.type === 'tool_result') {
+          const toolUseId = (block as { tool_use_id?: string }).tool_use_id;
+          if (toolUseId && taskToolIds.has(toolUseId)) {
+            taskResultsByToolId.set(toolUseId, msg);
+          }
+        }
+      }
+    }
+  }
+
   const blocks: Block[] = [];
   let agentBuffer: Message[] = [];
 
-  for (const msg of messages) {
-    if (isAgentChainMessage(msg)) {
-      // Accumulate agent chain messages
-      agentBuffer.push(msg);
-    } else {
+  for (const msg of topLevel) {
+    // Check if this is a Task tool result (user message with tool_result for a Task tool)
+    const isTaskResult =
+      msg.role === MessageRole.USER &&
+      Array.isArray(msg.content) &&
+      msg.content.some(
+        block =>
+          block.type === 'tool_result' &&
+          taskToolIds.has((block as { tool_use_id?: string }).tool_use_id || '')
+      );
+
+    // Skip Task results - they'll be included with their nested operations below
+    if (isTaskResult) {
+      continue;
+    }
+
+    // Regular message handling
+    if (!isAgentChainMessage(msg)) {
       // Flush agent buffer if we have any
       if (agentBuffer.length > 0) {
         blocks.push({ type: 'agent-chain', messages: agentBuffer });
@@ -142,6 +207,34 @@ function groupMessagesIntoBlocks(messages: Message[]): Block[] {
 
       // Add the current message as individual block
       blocks.push({ type: 'message', message: msg });
+    } else {
+      // Accumulate agent chain messages
+      agentBuffer.push(msg);
+    }
+
+    // After processing the message, check if it has Task tool uses
+    // If so, add nested operations + result as a regular agent-chain
+    const taskTools = msg.tool_uses?.filter(t => t.name === 'Task') || [];
+    for (const taskTool of taskTools) {
+      const children = nestedByParent.get(taskTool.id) || [];
+      const resultMsg = taskResultsByToolId.get(taskTool.id);
+
+      // Combine nested operations with result message
+      const chainMessages = [...children];
+      if (resultMsg) {
+        chainMessages.push(resultMsg);
+      }
+
+      if (chainMessages.length > 0) {
+        // Flush agent buffer before nested operations
+        if (agentBuffer.length > 0) {
+          blocks.push({ type: 'agent-chain', messages: agentBuffer });
+          agentBuffer = [];
+        }
+
+        // Show nested operations + result as a regular agent chain
+        blocks.push({ type: 'agent-chain', messages: chainMessages });
+      }
     }
   }
 

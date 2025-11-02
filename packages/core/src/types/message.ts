@@ -113,6 +113,14 @@ export interface Message {
   /** Tool uses in this message (for assistant messages) */
   tool_uses?: ToolUse[];
 
+  /**
+   * Parent tool use ID (from Claude Agent SDK)
+   * When a tool spawns nested operations (e.g., Task tool spawning Read/Grep),
+   * child operations have this set to the parent tool's ID.
+   * This enables grouping nested tool calls under their parent in the UI.
+   */
+  parent_tool_use_id?: string | null;
+
   /** Agent-specific metadata */
   metadata?: {
     /** Model used for this message */

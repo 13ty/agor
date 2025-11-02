@@ -73,6 +73,7 @@ export type ProcessedEvent =
         signature?: string; // For thinking blocks
       }>;
       toolUses?: Array<{ id: string; name: string; input: Record<string, unknown> }>;
+      parent_tool_use_id?: string | null;
       agentSessionId?: string;
       resolvedModel?: string;
     }
@@ -271,6 +272,7 @@ export class SDKMessageProcessor {
         role: MessageRole.ASSISTANT,
         content: contentBlocks,
         toolUses: toolUses.length > 0 ? toolUses : undefined,
+        parent_tool_use_id: msg.parent_tool_use_id || null,
         agentSessionId: this.state.capturedAgentSessionId,
         resolvedModel: this.state.resolvedModel,
       },
@@ -317,6 +319,7 @@ export class SDKMessageProcessor {
           role: MessageRole.USER,
           content: content as ContentBlock[], // Tool result content
           toolUses: undefined,
+          parent_tool_use_id: msg.parent_tool_use_id || null,
           agentSessionId: this.state.capturedAgentSessionId,
           resolvedModel: this.state.resolvedModel,
         },
@@ -333,6 +336,7 @@ export class SDKMessageProcessor {
           role: MessageRole.USER,
           content: content as ContentBlock[],
           toolUses: undefined,
+          parent_tool_use_id: msg.parent_tool_use_id || null,
           agentSessionId: this.state.capturedAgentSessionId,
           resolvedModel: this.state.resolvedModel,
         },

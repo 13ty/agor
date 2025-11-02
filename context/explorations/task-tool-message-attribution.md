@@ -144,4 +144,118 @@ Option C: **Merge with tool results**
 
 ---
 
-**Investigate further in next session:** Start by tracing message creation in daemon, then check database actual values for these messages.
+## Resolution
+
+**Date Resolved:** 2025-11-01
+**Fix Location:** `apps/agor-ui/src/components/MessageBlock/MessageBlock.tsx`
+
+### What We Found
+
+The Task tool is a **black box** - we only see:
+
+1. Task invocation (assistant message with `tool_use` block)
+2. Task prompt as a user message (THIS WAS THE BUG)
+3. Task result (user message with `tool_result` block)
+
+All internal subsession work is hidden from the parent session.
+
+### The Fix
+
+Added `isTaskToolPrompt()` helper function that identifies Task prompts by:
+
+- Role is `'user'` (incorrect but that's how SDK sends them)
+- Content is array (not string like real user messages)
+- Content contains only `text` blocks (no `tool_result` blocks)
+
+When detected:
+
+- Display message as **agent message** (left-aligned, agent avatar)
+- Prefix content with `[Task Tool]\n`
+- Makes it clear the prompt was agent-generated, not user-written
+
+### Result
+
+Task tool prompts now display correctly as agent-initiated subsession spawns:
+
+```
+[Agent side, left-aligned]
+┌─────────────────────────────────────┐
+│ 🤖 [Task Tool]                      │
+│ Find the fork button implementation │
+│ in the Agor UI. Look for:           │
+│ 1. The fork button component...     │
+└─────────────────────────────────────┘
+```
+
+Instead of appearing as user messages on the right side.
+
+---
+
+## Phase 2: parent_tool_use_id Implementation
+
+**Date:** 2025-11-02
+**Implementation:** Capture and store nested tool call relationships
+
+### What We Implemented
+
+The Claude Agent SDK provides `parent_tool_use_id` on all SDK messages, which identifies when a tool spawns nested operations (e.g., Task tool spawning Read/Grep calls).
+
+### Changes Made
+
+1. **Type Updates** (`packages/core/src/types/Message.ts`)
+   - Added `parent_tool_use_id?: string | null` to Message interface
+   - Documented purpose: tracking nested tool calls for UI grouping
+
+2. **Database Schema** (`packages/core/src/db/schema.ts`)
+   - Added `parent_tool_use_id` column to messages table
+   - Migration: `packages/core/src/db/migrations/0002_add_parent_tool_use_id.ts`
+
+3. **Message Processor** (`packages/core/src/tools/claude/message-processor.ts`)
+   - Updated `ProcessedEvent` type to include `parent_tool_use_id`
+   - Extract `parent_tool_use_id` from SDK messages in `handleAssistant()` and `handleUser()`
+   - Pass through to all message creation events
+
+4. **Message Builder** (`packages/core/src/tools/claude/message-builder.ts`)
+   - Updated `createAssistantMessage()` to accept `parentToolUseId` parameter
+   - Updated `createUserMessageFromContent()` to accept `parentToolUseId` parameter
+   - Store in message objects before database insertion
+
+5. **Message Repository** (`packages/core/src/db/repositories/messages.ts`)
+   - Updated `rowToMessage()` to read `parent_tool_use_id` from database
+   - Updated `messageToRow()` to write `parent_tool_use_id` to database
+
+6. **Integration** (`packages/core/src/tools/claude/claude-tool.ts`)
+   - Pass `event.parent_tool_use_id` when calling message builder functions
+   - Applied to both streaming and non-streaming paths
+
+### How It Works
+
+When the Task tool is invoked:
+
+```
+Assistant message: tool_use (Task)
+  └─ tool_use_id: "toolu_abc123"
+
+User message: Task prompt
+  └─ parent_tool_use_id: null (this is the prompt TO the subsession)
+
+Assistant message: Read tool (INSIDE Task subsession)
+  └─ parent_tool_use_id: "toolu_abc123"  ← Links to parent Task!
+
+User message: Read result (INSIDE Task subsession)
+  └─ parent_tool_use_id: "toolu_abc123"  ← Links to parent Task!
+
+User message: Task result
+  └─ parent_tool_use_id: null (final summary from subsession)
+```
+
+### Next Steps (UI)
+
+With `parent_tool_use_id` now captured, the UI can:
+
+1. Group nested tool calls under their parent Task invocation
+2. Display Task tools as collapsed sections with nested operations
+3. Show real-time progress as subsession tools execute
+4. Match Claude Code CLI's grouped display pattern
+
+This enables the UI treatment described in Phase 1, plus the ability to introspect what's happening inside Task subsessions!

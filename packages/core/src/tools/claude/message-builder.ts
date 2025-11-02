@@ -78,7 +78,8 @@ export async function createUserMessageFromContent(
   }>,
   taskId: TaskID | undefined,
   nextIndex: number,
-  messagesService: MessagesService
+  messagesService: MessagesService,
+  parentToolUseId?: string | null
 ): Promise<Message> {
   // Extract preview from content
   let contentPreview = '';
@@ -104,6 +105,7 @@ export async function createUserMessageFromContent(
     content_preview: contentPreview,
     content: content as Message['content'], // Tool result blocks
     task_id: taskId,
+    parent_tool_use_id: parentToolUseId || undefined,
   };
 
   await messagesService.create(userMessage);
@@ -128,10 +130,11 @@ export async function createAssistantMessage(
   nextIndex: number,
   resolvedModel: string | undefined,
   messagesService: MessagesService,
-  tasksService?: TasksService
+  tasksService?: TasksService,
+  parentToolUseId?: string | null
 ): Promise<Message> {
   // Extract text content for preview
-  const textBlocks = content.filter((b) => b.type === 'text').map((b) => b.text || '');
+  const textBlocks = content.filter(b => b.type === 'text').map(b => b.text || '');
   const fullTextContent = textBlocks.join('');
   const contentPreview = fullTextContent.substring(0, 200);
 
@@ -146,6 +149,7 @@ export async function createAssistantMessage(
     content: content as Message['content'],
     tool_uses: toolUses,
     task_id: taskId,
+    parent_tool_use_id: parentToolUseId || undefined,
     metadata: {
       model: resolvedModel || DEFAULT_CLAUDE_MODEL,
       tokens: {

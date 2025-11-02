@@ -37,6 +37,7 @@ import {
   createUserMessageFromContent,
   extractTokenUsage,
 } from './message-builder';
+import type { ProcessedEvent } from './message-processor';
 import { ClaudePromptService } from './prompt-service';
 
 /**
@@ -415,8 +416,10 @@ export class ClaudeTool implements ITool {
           );
         }
 
-        // Handle based on role
-        if ('role' in event && event.role === MessageRole.ASSISTANT) {
+        // Handle based on role (narrow to complete event type)
+        if (event.type === 'complete' && event.role === MessageRole.ASSISTANT) {
+          // Type assertion needed because TypeScript can't properly narrow discriminated unions with optional properties
+          const completeEvent = event as Extract<ProcessedEvent, { type: 'complete' }>;
           /**
            * ID Selection Strategy:
            * 1. Prefer text message ID (most common case - response with thinking)
@@ -435,13 +438,14 @@ export class ClaudeTool implements ITool {
           await createAssistantMessage(
             sessionId,
             assistantMessageId,
-            event.content,
-            event.toolUses,
+            completeEvent.content,
+            completeEvent.toolUses,
             taskId,
             nextIndex++,
             resolvedModel,
             this.messagesService!,
-            this.tasksService
+            this.tasksService,
+            completeEvent.parent_tool_use_id ?? null
           );
           assistantMessageIds.push(assistantMessageId);
 
@@ -451,16 +455,19 @@ export class ClaudeTool implements ITool {
           currentThinkingMessageId = null;
           streamStartTime = Date.now();
           firstTokenTime = null;
-        } else if ('role' in event && event.role === MessageRole.USER) {
+        } else if (event.type === 'complete' && event.role === MessageRole.USER) {
+          // Type assertion for user message
+          const completeEvent = event as Extract<ProcessedEvent, { type: 'complete' }>;
           // Create user message (tool results, etc.)
           const userMessageId = generateId() as MessageID;
           await createUserMessageFromContent(
             sessionId,
             userMessageId,
-            event.content,
+            completeEvent.content,
             taskId,
             nextIndex++,
-            this.messagesService!
+            this.messagesService!,
+            completeEvent.parent_tool_use_id ?? null
           );
           // Don't add to assistantMessageIds - these are user messages
         }
@@ -629,18 +636,21 @@ export class ClaudeTool implements ITool {
       }
 
       // Handle complete messages only
-      if (event.type === 'complete' && event.content) {
+      if (event.type === 'complete' && event.content && event.role === MessageRole.ASSISTANT) {
+        // Type assertion for complete event
+        const completeEvent = event as Extract<ProcessedEvent, { type: 'complete' }>;
         const messageId = generateId() as MessageID;
         await createAssistantMessage(
           sessionId,
           messageId,
-          event.content,
-          event.toolUses,
+          completeEvent.content,
+          completeEvent.toolUses,
           taskId,
           nextIndex++,
           resolvedModel,
           this.messagesService!,
-          this.tasksService
+          this.tasksService,
+          completeEvent.parent_tool_use_id ?? null
         );
         assistantMessageIds.push(messageId);
       }

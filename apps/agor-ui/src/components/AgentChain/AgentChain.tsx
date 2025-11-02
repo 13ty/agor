@@ -102,6 +102,36 @@ export const AgentChain: React.FC<AgentChainProps> = ({ messages }) => {
 
       if (!Array.isArray(message.content)) continue;
 
+      // Special handling: Tool result messages (user role with tool_result blocks)
+      // Extract text content and show as thoughts
+      if (message.role === 'user') {
+        const toolResults = message.content.filter(b => b.type === 'tool_result');
+        if (toolResults.length > 0) {
+          for (const block of toolResults) {
+            const toolResult = block as unknown as ToolResultBlock;
+            let resultText = '';
+
+            if (typeof toolResult.content === 'string') {
+              resultText = toolResult.content;
+            } else if (Array.isArray(toolResult.content)) {
+              resultText = toolResult.content
+                .filter(b => b.type === 'text')
+                .map(b => (b as { text: string }).text)
+                .join('\n');
+            }
+
+            if (resultText.trim()) {
+              items.push({
+                type: 'thought',
+                content: resultText,
+                message,
+              });
+            }
+          }
+          continue; // Skip normal processing for tool result messages
+        }
+      }
+
       const toolUseMap = new Map<string, ToolUseBlock>();
       const textBlocksBeforeTools: string[] = [];
       const textBlocksAfterTools: string[] = [];
@@ -247,7 +277,7 @@ export const AgentChain: React.FC<AgentChainProps> = ({ messages }) => {
 
       return {
         title: 'Thinking',
-        status: 'success' as const,
+        // No status - thoughts are neutral, not success/error
         ...(thoughtContent.trim() && {
           content: (
             <div
@@ -294,9 +324,9 @@ export const AgentChain: React.FC<AgentChainProps> = ({ messages }) => {
       const icon = !toolResult ? (
         <Spin key="loading" size="small" />
       ) : isError ? (
-        <CloseCircleOutlined key="error" style={{ fontSize: 14, color: token.colorError }} />
+        <CloseCircleOutlined key="error" style={{ fontSize: 14, color: token.colorErrorBg }} />
       ) : (
-        <CheckCircleOutlined key="success" style={{ fontSize: 14, color: token.colorSuccess }} />
+        <CheckCircleOutlined key="success" style={{ fontSize: 14, color: token.colorSuccessBg }} />
       );
 
       // Build additional details line (e.g., command for Bash)
@@ -416,9 +446,9 @@ export const AgentChain: React.FC<AgentChainProps> = ({ messages }) => {
 
             {/* Status icon */}
             {hasErrors ? (
-              <CloseCircleOutlined style={{ color: token.colorError, fontSize: 16 }} />
+              <CloseCircleOutlined style={{ color: token.colorErrorBg, fontSize: 16 }} />
             ) : (
-              <CheckCircleOutlined style={{ color: token.colorSuccess, fontSize: 16 }} />
+              <CheckCircleOutlined style={{ color: token.colorSuccessBg, fontSize: 16 }} />
             )}
 
             {/* Summary text */}
@@ -435,7 +465,11 @@ export const AgentChain: React.FC<AgentChainProps> = ({ messages }) => {
       </div>
 
       {/* Expanded chain */}
-      {expanded && <ThoughtChain items={thoughtChainItems} style={{ marginTop: token.sizeUnit }} />}
+      {expanded && (
+        <div style={{ paddingLeft: token.sizeUnit * 8, marginTop: token.sizeUnit }}>
+          <ThoughtChain items={thoughtChainItems} />
+        </div>
+      )}
     </div>
   );
 };
