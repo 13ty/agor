@@ -1,6 +1,7 @@
 import type { Repo, Session, Task, User, Worktree } from '@agor/core/types';
 import {
   BranchesOutlined,
+  ClockCircleOutlined,
   CodeOutlined,
   DeleteOutlined,
   DragOutlined,
@@ -104,8 +105,21 @@ const WorktreeCard = ({
     }
   };
 
-  // Build genealogy tree structure
-  const sessionTreeData = useMemo(() => buildSessionTree(sessions), [sessions]);
+  // Separate manual sessions from scheduled runs
+  const manualSessions = useMemo(
+    () => sessions.filter(s => !s.scheduled_from_worktree),
+    [sessions]
+  );
+  const scheduledSessions = useMemo(
+    () =>
+      sessions
+        .filter(s => s.scheduled_from_worktree)
+        .sort((a, b) => (b.scheduled_run_at || 0) - (a.scheduled_run_at || 0)), // Most recent first
+    [sessions]
+  );
+
+  // Build genealogy tree structure (only for manual sessions)
+  const sessionTreeData = useMemo(() => buildSessionTree(manualSessions), [manualSessions]);
 
   // Auto-expand all nodes on mount and when new nodes with children are added
   useEffect(() => {
@@ -263,7 +277,7 @@ const WorktreeCard = ({
       <Space size={4} align="center">
         <Typography.Text strong>Sessions</Typography.Text>
         <Badge
-          count={sessions.length}
+          count={manualSessions.length}
           showZero
           style={{ backgroundColor: token.colorPrimaryBgHover }}
         />
@@ -283,6 +297,80 @@ const WorktreeCard = ({
           </Button>
         </div>
       )}
+    </div>
+  );
+
+  // Scheduled runs header
+  const scheduledRunsHeader = (
+    <div
+      style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        width: '100%',
+      }}
+    >
+      <Space size={4} align="center">
+        <ClockCircleOutlined style={{ color: token.colorInfo }} />
+        <Typography.Text strong>Scheduled Runs</Typography.Text>
+        <Badge
+          count={scheduledSessions.length}
+          showZero
+          style={{ backgroundColor: token.colorInfoBgHover }}
+        />
+      </Space>
+    </div>
+  );
+
+  // Scheduled runs content (flat list, no genealogy tree needed)
+  const scheduledRunsContent = (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      {scheduledSessions.map(session => (
+        <div
+          key={session.session_id}
+          style={{
+            border: `1px solid rgba(255, 255, 255, 0.1)`,
+            borderRadius: 4,
+            padding: 8,
+            background: 'rgba(0, 0, 0, 0.2)',
+            display: 'flex',
+            alignItems: 'center',
+            cursor: 'pointer',
+          }}
+          onClick={() => onSessionClick?.(session.session_id)}
+        >
+          <Space size={4} align="center" style={{ flex: 1, minWidth: 0 }}>
+            <ToolIcon tool={session.agentic_tool} size={20} />
+            <Typography.Text
+              style={{
+                fontSize: 12,
+                flex: 1,
+                display: '-webkit-box',
+                WebkitLineClamp: SESSION_TITLE_MAX_LINES,
+                WebkitBoxOrient: 'vertical',
+                overflow: 'hidden',
+                wordBreak: 'break-word',
+                color: token.colorTextSecondary,
+              }}
+            >
+              {session.title || session.description || session.agentic_tool}
+            </Typography.Text>
+          </Space>
+
+          {/* Status indicator */}
+          <div
+            style={{
+              marginLeft: 8,
+              width: 24,
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+            }}
+          >
+            <TaskStatusIcon status={session.status} size={16} />
+          </div>
+        </div>
+      ))}
     </div>
   );
 
@@ -429,10 +517,10 @@ const WorktreeCard = ({
         </div>
       )}
 
-      {/* Sessions - collapsible (only show if sessions exist, otherwise show button directly) */}
+      {/* Sessions & Scheduled Runs - collapsible sections */}
       <div className="nodrag">
         {sessions.length === 0 ? (
-          // No sessions: show create button without collapse wrapper
+          // No sessions at all: show create button without collapse wrapper
           <div
             style={{
               display: 'flex',
@@ -458,19 +546,40 @@ const WorktreeCard = ({
             )}
           </div>
         ) : (
-          // Has sessions: show collapsible section
-          <Collapse
-            defaultActiveKey={defaultExpanded ? ['sessions'] : []}
-            items={[
-              {
-                key: 'sessions',
-                label: sessionListHeader,
-                children: sessionListContent,
-              },
-            ]}
-            ghost
-            style={{ marginTop: 8 }}
-          />
+          // Has sessions: show collapsible sections
+          <>
+            {/* Manual Sessions */}
+            {manualSessions.length > 0 && (
+              <Collapse
+                defaultActiveKey={defaultExpanded ? ['sessions'] : []}
+                items={[
+                  {
+                    key: 'sessions',
+                    label: sessionListHeader,
+                    children: sessionListContent,
+                  },
+                ]}
+                ghost
+                style={{ marginTop: 8 }}
+              />
+            )}
+
+            {/* Scheduled Runs */}
+            {scheduledSessions.length > 0 && (
+              <Collapse
+                defaultActiveKey={defaultExpanded ? ['scheduled-runs'] : []}
+                items={[
+                  {
+                    key: 'scheduled-runs',
+                    label: scheduledRunsHeader,
+                    children: scheduledRunsContent,
+                  },
+                ]}
+                ghost
+                style={{ marginTop: manualSessions.length > 0 ? 0 : 8 }}
+              />
+            )}
+          </>
         )}
       </div>
 

@@ -255,7 +255,7 @@ export class SchedulerService {
       created_by: worktree.created_by,
       scheduled_run_at: scheduledRunAt,
       scheduled_from_worktree: true,
-      title: `Scheduled: ${worktree.name}`,
+      title: `[Scheduled run - ${new Date(scheduledRunAt).toISOString()}]`,
       contextFiles: schedule.context_files ?? [],
       permission_config: schedule.permission_mode
         ? { mode: schedule.permission_mode as PermissionMode }
