@@ -4,7 +4,7 @@
 
 Orchestrate Claude Code, Codex, and Gemini sessions on a multiplayer canvas. Manage git worktrees, track AI conversations, and visualize your team's agentic work in real-time.
 
-**[Docs](https://agor.live/)** | **[Discussions](https://github.com/preset-io/agor/discussions)**
+**📖 [Read the full documentation at agor.live →](https://agor.live/)**
 
 ---
 
