@@ -786,7 +786,7 @@ async function main() {
           }
 
           if (params.user) {
-            ensureMinimumRole(params, 'admin', 'list users');
+            ensureMinimumRole(params, 'member', 'list users');
             return context;
           }
 
@@ -802,7 +802,7 @@ async function main() {
       ],
       get: [
         context => {
-          ensureMinimumRole(context.params as AuthenticatedParams, 'admin', 'view users');
+          ensureMinimumRole(context.params as AuthenticatedParams, 'member', 'view users');
           return context;
         },
       ],
