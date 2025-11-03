@@ -10,7 +10,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { isDaemonRunning } from '@agor/core/api';
 import { loadConfig, setConfigValue } from '@agor/core/config';
-import { createDatabase, createUser, initializeDatabase, seedInitialData } from '@agor/core/db';
+import { createDatabase, createUser, runMigrations, seedInitialData } from '@agor/core/db';
 import { Command, Flags } from '@oclif/core';
 import chalk from 'chalk';
 import inquirer from 'inquirer';
@@ -286,7 +286,7 @@ export default class Init extends Command {
     this.log('💾 Setting up database...');
     const db = createDatabase({ url: `file:${dbPath}` });
 
-    await initializeDatabase(db);
+    await runMigrations(db);
     this.log(`${chalk.green('   ✓')} Created ${dbPath}`);
 
     // Seed initial data
