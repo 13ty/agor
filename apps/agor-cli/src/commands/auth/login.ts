@@ -4,11 +4,11 @@
  * Prompts for email/password and stores JWT token for future CLI commands
  */
 
-import * as readline from 'node:readline';
 import { createRestClient, isDaemonRunning } from '@agor/core/api';
 import { getDaemonUrl } from '@agor/core/config';
 import { Command, Flags } from '@oclif/core';
 import chalk from 'chalk';
+import inquirer from 'inquirer';
 import { saveToken } from '../../lib/auth';
 
 export default class Login extends Command {
@@ -49,19 +49,40 @@ export default class Login extends Command {
     }
 
     // Get credentials (prompt if not provided)
-    const email =
-      flags.email ||
-      (await this.prompt('Email', {
-        type: 'input',
-        required: true,
-      }));
+    let email = flags.email;
+    let password = flags.password;
 
-    const password =
-      flags.password ||
-      (await this.prompt('Password', {
-        type: 'hide',
-        required: true,
-      }));
+    if (!email || !password) {
+      const answers = await inquirer.prompt([
+        {
+          type: 'input',
+          name: 'email',
+          message: 'Email',
+          default: email,
+          validate: (input: string) => {
+            if (!input || !input.includes('@')) {
+              return 'Please enter a valid email address';
+            }
+            return true;
+          },
+        },
+        {
+          type: 'password',
+          name: 'password',
+          message: 'Password',
+          mask: '*',
+          validate: (input: string) => {
+            if (!input) {
+              return 'Password is required';
+            }
+            return true;
+          },
+        },
+      ]);
+
+      email = answers.email;
+      password = answers.password;
+    }
 
     // Create REST-only client (prevents hanging)
     const client = await createRestClient(daemonUrl);
@@ -130,37 +151,5 @@ export default class Login extends Command {
 
       this.error(chalk.red(`✗ Authentication failed: ${errorMessage}`));
     }
-  }
-
-  /**
-   * Prompt helper with proper typing
-   */
-  private async prompt(
-    message: string,
-    options: { type: 'input' | 'hide'; required: boolean }
-  ): Promise<string> {
-    return new Promise<string>(resolve => {
-      const rl = readline.createInterface({
-        input: process.stdin,
-        output: process.stdout,
-      });
-
-      const hiddenOutput = options.type === 'hide';
-      if (hiddenOutput && process.stdin.isTTY) {
-        // Disable stdin echo for password input
-        // biome-ignore lint/suspicious/noExplicitAny: setRawMode exists in TTY mode
-        (process.stdin as any).setRawMode?.(true);
-      }
-
-      rl.question(`${message}: `, (answer: string) => {
-        if (hiddenOutput && process.stdin.isTTY) {
-          // biome-ignore lint/suspicious/noExplicitAny: setRawMode exists in TTY mode
-          (process.stdin as any).setRawMode?.(false);
-          console.log(''); // New line after password input
-        }
-        rl.close();
-        resolve(answer.trim());
-      });
-    });
   }
 }
