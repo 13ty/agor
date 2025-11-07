@@ -1,6 +1,7 @@
 import { CloudOutlined, InfoCircleOutlined, SettingOutlined } from '@ant-design/icons';
 import { Alert, Button, Space, Typography } from 'antd';
 import { useEffect, useState } from 'react';
+import { copyToClipboard } from '../utils/clipboard';
 
 export function SandboxBanner() {
   const isCodespaces = import.meta.env.VITE_CODESPACES === 'true';
@@ -70,13 +71,7 @@ export function SandboxBanner() {
                 Run <code>pnpm agor init</code> in the terminal to set up authentication and API
                 keys
               </Typography.Text>
-              <Button
-                size="small"
-                onClick={() => {
-                  // Copy command to clipboard
-                  navigator.clipboard.writeText('pnpm agor init');
-                }}
-              >
+              <Button size="small" onClick={() => copyToClipboard('pnpm agor init')}>
                 Copy Command
               </Button>
             </Space>

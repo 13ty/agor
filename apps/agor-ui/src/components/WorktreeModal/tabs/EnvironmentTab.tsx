@@ -38,6 +38,7 @@ import {
   theme,
 } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
+import { useCopyToClipboard } from '../../../utils/clipboard';
 import {
   getEnvironmentState,
   getEnvironmentStateDescription,
@@ -61,13 +62,7 @@ const CommandPreview: React.FC<{
   preview: { success: boolean; result: string };
 }> = ({ label, preview }) => {
   const { token } = theme.useToken();
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = async () => {
-    await navigator.clipboard.writeText(preview.result);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
+  const [copied, handleCopy] = useCopyToClipboard();
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 32 }}>
@@ -86,7 +81,7 @@ const CommandPreview: React.FC<{
           cursor: 'pointer',
           lineHeight: 1.4,
         }}
-        onClick={handleCopy}
+        onClick={() => handleCopy(preview.result, true)}
         title="Click to copy"
       >
         {preview.result}
@@ -95,7 +90,7 @@ const CommandPreview: React.FC<{
         type="text"
         size="small"
         icon={copied ? <CheckOutlined /> : <CopyOutlined />}
-        onClick={handleCopy}
+        onClick={() => handleCopy(preview.result, true)}
         style={{ flexShrink: 0 }}
       />
     </div>
@@ -104,14 +99,7 @@ const CommandPreview: React.FC<{
 
 // Helper component for template field display (read-only view)
 const TemplateField: React.FC<{ label: string; value: string }> = ({ label, value }) => {
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = async () => {
-    if (!value) return;
-    await navigator.clipboard.writeText(value);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
+  const [copied, handleCopy] = useCopyToClipboard();
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 32 }}>
@@ -130,7 +118,7 @@ const TemplateField: React.FC<{ label: string; value: string }> = ({ label, valu
           opacity: value ? 1 : 0.5,
           lineHeight: 1.4,
         }}
-        onClick={handleCopy}
+        onClick={() => value && handleCopy(value, true)}
         title={value ? 'Click to copy' : undefined}
       >
         {value || 'Not configured'}
@@ -140,7 +128,7 @@ const TemplateField: React.FC<{ label: string; value: string }> = ({ label, valu
           type="text"
           size="small"
           icon={copied ? <CheckOutlined /> : <CopyOutlined />}
-          onClick={handleCopy}
+          onClick={() => handleCopy(value, true)}
           style={{ flexShrink: 0 }}
         />
       )}
