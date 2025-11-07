@@ -8,7 +8,7 @@ import { getDaemonUrl } from '../../config/daemon';
 
 // Lazy load particles
 const ParticleBackground = lazy(() =>
-  import('../LoginPage/ParticleBackground').then((module) => ({
+  import('../LoginPage/ParticleBackground').then(module => ({
     default: module.ParticleBackground,
   }))
 );
@@ -17,6 +17,10 @@ export interface AboutTabProps {
   connected: boolean;
   connectionError?: string;
   isAdmin?: boolean;
+}
+
+interface WindowWithAgorConfig extends Window {
+  AGOR_DAEMON_URL?: string;
 }
 
 interface HealthInfo {
@@ -41,22 +45,24 @@ export const AboutTab: React.FC<AboutTabProps> = ({
     console.log('[AboutTab] isAdmin:', isAdmin);
 
     // Determine which detection method was used
-    if (import.meta.env.VITE_DAEMON_URL) {
+    if ((window as WindowWithAgorConfig).AGOR_DAEMON_URL) {
+      setDetectionMethod('Runtime injection (window.AGOR_DAEMON_URL)');
+    } else if (import.meta.env.VITE_DAEMON_URL) {
       setDetectionMethod('Build-time env var (VITE_DAEMON_URL)');
     } else if (typeof window !== 'undefined' && window.location.pathname.startsWith('/ui')) {
-      setDetectionMethod('Runtime detection (served from /ui)');
+      setDetectionMethod('Same-host detection (served from /ui)');
     } else {
-      setDetectionMethod('Default fallback (localhost:3030)');
+      setDetectionMethod('Dev mode (explicit port)');
     }
 
     // Fetch health info
     fetch(`${daemonUrl}/health`)
-      .then((res) => res.json())
-      .then((data) => {
+      .then(res => res.json())
+      .then(data => {
         console.log('[AboutTab] Health info:', data);
         setHealthInfo(data);
       })
-      .catch((err) => console.error('Failed to fetch health info:', err));
+      .catch(err => console.error('Failed to fetch health info:', err));
   }, [daemonUrl, isAdmin]);
 
   return (
