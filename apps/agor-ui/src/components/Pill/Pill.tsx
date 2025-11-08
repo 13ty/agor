@@ -215,23 +215,32 @@ const ContextWindowPopoverContent: React.FC<{
       label: 'Per-Model Usage',
       children: (
         <div style={{ fontSize: '0.9em' }}>
-          {Object.entries(taskMetadata.model_usage).map(([modelId, usage]) => (
-            <div key={modelId} style={{ marginBottom: 12 }}>
-              <div style={{ fontWeight: 500, marginBottom: 4 }}>{modelId}</div>
-              <div style={{ marginLeft: 12, fontSize: '0.95em', color: token.colorTextSecondary }}>
-                <div>Input: {usage.inputTokens?.toLocaleString() || 0}</div>
-                <div>Output: {usage.outputTokens?.toLocaleString() || 0}</div>
-                {usage.cacheCreationInputTokens !== undefined &&
-                  usage.cacheCreationInputTokens > 0 && (
-                    <div>Cache creation: {usage.cacheCreationInputTokens.toLocaleString()}</div>
+          {Object.entries(taskMetadata.model_usage).map(([modelId, usage]) => {
+            // Per-model breakdown: input + output tokens for this turn
+            const modelContextUsage =
+              (usage.inputTokens || 0) + (usage.outputTokens || 0);
+
+            return (
+              <div key={modelId} style={{ marginBottom: 12 }}>
+                <div style={{ fontWeight: 500, marginBottom: 4 }}>{modelId}</div>
+                <div style={{ marginLeft: 12, fontSize: '0.95em', color: token.colorTextSecondary }}>
+                  <div>Input: {usage.inputTokens?.toLocaleString() || 0}</div>
+                  <div>Output: {usage.outputTokens?.toLocaleString() || 0}</div>
+                  {usage.cacheCreationInputTokens !== undefined &&
+                    usage.cacheCreationInputTokens > 0 && (
+                      <div>Cache creation: {usage.cacheCreationInputTokens.toLocaleString()}</div>
+                    )}
+                  {usage.cacheReadInputTokens !== undefined && usage.cacheReadInputTokens > 0 && (
+                    <div>Cache read: {usage.cacheReadInputTokens.toLocaleString()}</div>
                   )}
-                {usage.cacheReadInputTokens !== undefined && usage.cacheReadInputTokens > 0 && (
-                  <div>Cache read: {usage.cacheReadInputTokens.toLocaleString()}</div>
-                )}
-                <div>Limit: {usage.contextWindow?.toLocaleString() || 0}</div>
+                  <div style={{ marginTop: 4, fontWeight: 500, color: token.colorText }}>
+                    Context used: {modelContextUsage.toLocaleString()} /{' '}
+                    {usage.contextWindow?.toLocaleString() || 0}
+                  </div>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       ),
     });
@@ -267,14 +276,14 @@ const ContextWindowPopoverContent: React.FC<{
       {/* Primary info - always visible */}
       <div style={{ marginBottom: 16 }}>
         <div style={{ fontWeight: 600, fontSize: '1.05em', marginBottom: 8 }}>
-          Context Window Usage
+          Context Window Usage (Estimated)
         </div>
         <div style={{ fontSize: '1.1em', fontFamily: token.fontFamilyCode }}>
           {used.toLocaleString()} / {limit.toLocaleString()}{' '}
           <span style={{ color: token.colorTextSecondary }}>({percentage}%)</span>
         </div>
         <div style={{ fontSize: '0.85em', color: token.colorTextTertiary, marginTop: 6 }}>
-          Fresh input after cache breakpoints (this turn only)
+          Cumulative conversation tokens (input + output, resets on compaction)
         </div>
       </div>
 
