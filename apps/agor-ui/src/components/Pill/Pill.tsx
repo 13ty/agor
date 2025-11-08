@@ -17,7 +17,7 @@ import {
   ThunderboltOutlined,
   ToolOutlined,
 } from '@ant-design/icons';
-import { Tag, Tooltip, theme } from 'antd';
+import { Collapse, Popover, Tag, Tooltip, theme } from 'antd';
 import type React from 'react';
 import { copyToClipboard } from '../../utils/clipboard';
 
@@ -193,6 +193,157 @@ interface ContextWindowPillProps extends BasePillProps {
   };
 }
 
+/**
+ * Context Window Popover Content Component
+ * Displays detailed token usage, breakdown, and metadata in a structured layout
+ */
+const ContextWindowPopoverContent: React.FC<{
+  used: number;
+  limit: number;
+  percentage: number;
+  taskMetadata?: ContextWindowPillProps['taskMetadata'];
+}> = ({ used, limit, percentage, taskMetadata }) => {
+  const { token } = theme.useToken();
+
+  // Build collapsible items for advanced sections
+  const advancedItems = [];
+
+  // Add per-model usage as collapsible
+  if (taskMetadata?.model_usage && Object.keys(taskMetadata.model_usage).length > 0) {
+    advancedItems.push({
+      key: 'per-model',
+      label: 'Per-Model Usage',
+      children: (
+        <div style={{ fontSize: '0.9em' }}>
+          {Object.entries(taskMetadata.model_usage).map(([modelId, usage]) => (
+            <div key={modelId} style={{ marginBottom: 12 }}>
+              <div style={{ fontWeight: 500, marginBottom: 4 }}>{modelId}</div>
+              <div style={{ marginLeft: 12, fontSize: '0.95em', color: token.colorTextSecondary }}>
+                <div>Input: {usage.inputTokens?.toLocaleString() || 0}</div>
+                <div>Output: {usage.outputTokens?.toLocaleString() || 0}</div>
+                {usage.cacheCreationInputTokens !== undefined &&
+                  usage.cacheCreationInputTokens > 0 && (
+                    <div>Cache creation: {usage.cacheCreationInputTokens.toLocaleString()}</div>
+                  )}
+                {usage.cacheReadInputTokens !== undefined && usage.cacheReadInputTokens > 0 && (
+                  <div>Cache read: {usage.cacheReadInputTokens.toLocaleString()}</div>
+                )}
+                <div>Limit: {usage.contextWindow?.toLocaleString() || 0}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      ),
+    });
+  }
+
+  // Add raw JSON as collapsible
+  if (taskMetadata) {
+    advancedItems.push({
+      key: 'raw-json',
+      label: 'Raw JSON',
+      children: (
+        <pre
+          style={{
+            fontSize: '0.75em',
+            fontFamily: token.fontFamilyCode,
+            background: token.colorBgContainer,
+            padding: 8,
+            borderRadius: 4,
+            overflowX: 'auto',
+            maxHeight: 300,
+            margin: 0,
+            border: `1px solid ${token.colorBorder}`,
+          }}
+        >
+          {JSON.stringify(taskMetadata, null, 2)}
+        </pre>
+      ),
+    });
+  }
+
+  return (
+    <div style={{ width: 400, maxWidth: '90vw' }}>
+      {/* Primary info - always visible */}
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ fontWeight: 600, fontSize: '1.05em', marginBottom: 8 }}>
+          Context Window Usage
+        </div>
+        <div style={{ fontSize: '1.1em', fontFamily: token.fontFamilyCode }}>
+          {used.toLocaleString()} / {limit.toLocaleString()}{' '}
+          <span style={{ color: token.colorTextSecondary }}>({percentage}%)</span>
+        </div>
+        <div style={{ fontSize: '0.85em', color: token.colorTextTertiary, marginTop: 6 }}>
+          Fresh input after cache breakpoints (this turn only)
+        </div>
+      </div>
+
+      {/* Token breakdown - always visible if available */}
+      {taskMetadata?.usage && (
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontWeight: 500, marginBottom: 6 }}>Token Breakdown</div>
+          <div style={{ fontSize: '0.9em', marginLeft: 12, color: token.colorTextSecondary }}>
+            <div>Input: {taskMetadata.usage.input_tokens?.toLocaleString() || 0}</div>
+            <div>Output: {taskMetadata.usage.output_tokens?.toLocaleString() || 0}</div>
+            {taskMetadata.usage.cache_creation_tokens !== undefined &&
+              taskMetadata.usage.cache_creation_tokens > 0 && (
+                <div>
+                  Cache creation: {taskMetadata.usage.cache_creation_tokens.toLocaleString()}
+                </div>
+              )}
+            {taskMetadata.usage.cache_read_tokens !== undefined &&
+              taskMetadata.usage.cache_read_tokens > 0 && (
+                <div>Cache read: {taskMetadata.usage.cache_read_tokens.toLocaleString()}</div>
+              )}
+            <div style={{ marginTop: 4, fontWeight: 500, color: token.colorText }}>
+              Total: {taskMetadata.usage.total_tokens?.toLocaleString() || 0}
+            </div>
+            {taskMetadata.usage.estimated_cost_usd !== undefined && (
+              <div style={{ marginTop: 4, color: token.colorWarning }}>
+                Cost: ${taskMetadata.usage.estimated_cost_usd.toFixed(4)}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Model & duration - compact */}
+      {(taskMetadata?.model || taskMetadata?.duration_ms !== undefined) && (
+        <div
+          style={{
+            fontSize: '0.85em',
+            color: token.colorTextSecondary,
+            paddingTop: 12,
+            borderTop: `1px solid ${token.colorBorderSecondary}`,
+            marginBottom: 16,
+          }}
+        >
+          {taskMetadata?.model && (
+            <div>
+              Model: <span style={{ fontFamily: token.fontFamilyCode }}>{taskMetadata.model}</span>
+            </div>
+          )}
+          {taskMetadata?.duration_ms !== undefined && (
+            <div>Duration: {(taskMetadata.duration_ms / 1000).toFixed(2)}s</div>
+          )}
+        </div>
+      )}
+
+      {/* Advanced sections - collapsible */}
+      {advancedItems.length > 0 && (
+        <Collapse
+          size="small"
+          ghost
+          items={advancedItems}
+          style={{
+            fontSize: '0.9em',
+          }}
+        />
+      )}
+    </div>
+  );
+};
+
 export const ContextWindowPill: React.FC<ContextWindowPillProps> = ({
   used,
   limit,
@@ -208,108 +359,30 @@ export const ContextWindowPill: React.FC<ContextWindowPillProps> = ({
     return 'red';
   };
 
-  const tooltipContent = (
-    <div style={{ maxWidth: 600 }}>
-      <div style={{ fontWeight: 'bold', marginBottom: 8 }}>Context Window Usage (This Turn)</div>
-      <div>
-        Fresh input: {used.toLocaleString()} / {limit.toLocaleString()} ({percentage}%)
-      </div>
-      <div style={{ fontSize: '0.85em', color: '#888', marginTop: 4 }}>
-        Note: Shows fresh input after cache breakpoints. SDK doesn't provide session-level
-        cumulative tracking.
-      </div>
-
-      {taskMetadata?.usage && (
-        <>
-          <div style={{ marginTop: 12, fontWeight: 'bold' }}>Token Breakdown:</div>
-          <div style={{ fontSize: '0.9em', marginLeft: 8 }}>
-            <div>Input (fresh): {taskMetadata.usage.input_tokens?.toLocaleString() || 0}</div>
-            <div>Output: {taskMetadata.usage.output_tokens?.toLocaleString() || 0}</div>
-            <div>
-              Cache creation: {taskMetadata.usage.cache_creation_tokens?.toLocaleString() || 0}
-            </div>
-            <div>Cache read: {taskMetadata.usage.cache_read_tokens?.toLocaleString() || 0}</div>
-            <div>Total: {taskMetadata.usage.total_tokens?.toLocaleString() || 0}</div>
-            {taskMetadata.usage.estimated_cost_usd !== undefined && (
-              <div>Cost: ${taskMetadata.usage.estimated_cost_usd.toFixed(4)}</div>
-            )}
-          </div>
-        </>
-      )}
-
-      {taskMetadata?.model && (
-        <div style={{ marginTop: 8, fontSize: '0.9em' }}>
-          <span style={{ fontWeight: 500 }}>Model:</span> {taskMetadata.model}
-        </div>
-      )}
-
-      {taskMetadata?.duration_ms !== undefined && (
-        <div style={{ marginTop: 4, fontSize: '0.9em' }}>
-          <span style={{ fontWeight: 500 }}>Duration:</span>{' '}
-          {(taskMetadata.duration_ms / 1000).toFixed(2)}s
-        </div>
-      )}
-
-      {taskMetadata?.model_usage && Object.keys(taskMetadata.model_usage).length > 0 && (
-        <>
-          <div style={{ marginTop: 12, fontWeight: 'bold' }}>Per-Model Usage:</div>
-          {Object.entries(taskMetadata.model_usage).map(([modelId, usage]) => (
-            <div key={modelId} style={{ marginTop: 8, fontSize: '0.85em', marginLeft: 8 }}>
-              <div style={{ fontWeight: 500 }}>{modelId}:</div>
-              <div style={{ marginLeft: 8 }}>
-                <div>Input: {usage.inputTokens?.toLocaleString() || 0}</div>
-                <div>Output: {usage.outputTokens?.toLocaleString() || 0}</div>
-                {usage.cacheCreationInputTokens !== undefined && (
-                  <div>Cache creation: {usage.cacheCreationInputTokens.toLocaleString()}</div>
-                )}
-                {usage.cacheReadInputTokens !== undefined && (
-                  <div>Cache read: {usage.cacheReadInputTokens.toLocaleString()}</div>
-                )}
-                <div>Limit: {usage.contextWindow?.toLocaleString() || 0}</div>
-              </div>
-            </div>
-          ))}
-        </>
-      )}
-
-      {taskMetadata && (
-        <>
-          <div
-            style={{
-              marginTop: 16,
-              fontWeight: 'bold',
-              borderTop: '1px solid #333',
-              paddingTop: 8,
-            }}
-          >
-            Raw JSON Payload:
-          </div>
-          <pre
-            style={{
-              fontSize: '0.75em',
-              fontFamily: 'monospace',
-              background: '#1a1a1a',
-              padding: 8,
-              borderRadius: 4,
-              overflowX: 'auto',
-              maxHeight: 300,
-              marginTop: 4,
-            }}
-          >
-            {JSON.stringify(taskMetadata, null, 2)}
-          </pre>
-        </>
-      )}
-    </div>
-  );
-
   const pill = (
     <Tag icon={<PercentageOutlined />} color={getColor()} style={style}>
       {percentage}
     </Tag>
   );
 
-  return <Tooltip title={tooltipContent}>{pill}</Tooltip>;
+  return (
+    <Popover
+      content={
+        <ContextWindowPopoverContent
+          used={used}
+          limit={limit}
+          percentage={percentage}
+          taskMetadata={taskMetadata}
+        />
+      }
+      title={null}
+      trigger="hover"
+      placement="top"
+      mouseEnterDelay={0.3}
+    >
+      {pill}
+    </Popover>
+  );
 };
 
 interface ModelPillProps extends BasePillProps {
