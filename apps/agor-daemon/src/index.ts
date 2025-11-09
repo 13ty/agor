@@ -187,6 +187,8 @@ import { ensureMinimumRole, requireMinimumRole } from './utils/authorization';
 interface RouteParams extends Params {
   route?: {
     id?: string;
+    messageId?: string;
+    mcpId?: string;
   };
 }
 
@@ -762,6 +764,8 @@ async function main() {
       patch: [requireMinimumRole('member', 'update messages')],
       remove: [requireMinimumRole('member', 'delete messages')],
     },
+    // No custom 'after' hooks needed - FeathersJS automatically emits 'removed' event
+    // with the full message object (including status, session_id, etc.)
   });
 
   app.service('board-objects').hooks({
@@ -2048,6 +2052,25 @@ async function main() {
                 },
                 'Session'
               );
+
+              // Check for queued messages and auto-process next one
+              // NOTE: Only process queue if task completed successfully
+              // If task failed, stop queue to prevent cascading failures
+              setImmediate(async () => {
+                try {
+                  // Check if the task completed successfully
+                  const completedTask = await tasksService.get(task.task_id, params);
+                  if (completedTask.status === TaskStatus.COMPLETED) {
+                    await processNextQueuedMessage(id as SessionID, params);
+                  } else {
+                    console.log(
+                      `⚠️  Task ${task.task_id.substring(0, 8)} failed - halting queue processing for session ${id.substring(0, 8)}`
+                    );
+                  }
+                } catch (error) {
+                  console.error(`❌ Error processing queued message for session ${id}:`, error);
+                }
+              });
             } catch (error) {
               console.error(`❌ Error completing task ${task.task_id}:`, error);
               // Try to mark task as failed (may also fail if deleted)
@@ -2252,6 +2275,134 @@ async function main() {
       return result;
     },
   });
+
+  /**
+   * POST /sessions/:id/messages/queue
+   * GET /sessions/:id/messages/queue
+   * Queue management endpoints (create and list)
+   *
+   * NOTE: Queue deletion is handled via messages service directly (client.service('messages').remove(id))
+   * This keeps the client simple and avoids FeathersJS nested route issues
+   */
+  app.use('/sessions/:id/messages/queue', {
+    async create(data: { prompt: string }, params: RouteParams) {
+      ensureMinimumRole(params, 'member', 'queue messages');
+
+      const sessionId = params.route?.id;
+      if (!sessionId) throw new Error('Session ID required');
+      if (!data.prompt) throw new Error('Prompt required');
+
+      const session = await sessionsService.get(sessionId, params);
+
+      // Create queued message
+      const messageRepo = new MessagesRepository(db);
+      const queuedMessage = await messageRepo.createQueued(sessionId as SessionID, data.prompt);
+
+      console.log(
+        `📬 Queued message for session ${sessionId.substring(0, 8)} at position ${queuedMessage.queue_position}`
+      );
+
+      // Emit event for real-time UI updates
+      app.service('messages').emit('queued', queuedMessage);
+
+      return {
+        success: true,
+        message: queuedMessage,
+      };
+    },
+
+    async find(params: RouteParams) {
+      ensureMinimumRole(params, 'member', 'view queue');
+
+      const sessionId = params.route?.id;
+      if (!sessionId) throw new Error('Session ID required');
+
+      const messageRepo = new MessagesRepository(db);
+      const queued = await messageRepo.findQueued(sessionId as SessionID);
+
+      return {
+        total: queued.length,
+        data: queued,
+      };
+    },
+    // biome-ignore lint/suspicious/noExplicitAny: Service type not compatible with Express
+  } as any);
+
+  /**
+   * Process the next queued message for a session
+   * Called automatically after task completion when session becomes idle
+   */
+  async function processNextQueuedMessage(
+    sessionId: SessionID,
+    params: RouteParams
+  ): Promise<void> {
+    // Get next queued message
+    const messageRepo = new MessagesRepository(db);
+    const nextMessage = await messageRepo.getNextQueued(sessionId);
+
+    if (!nextMessage) {
+      console.log(`📭 No queued messages for session ${sessionId.substring(0, 8)}`);
+      return;
+    }
+
+    // Re-fetch session to ensure it's still idle and not awaiting permission
+    const session = await sessionsService.get(sessionId, params);
+
+    if (session.status !== SessionStatus.IDLE) {
+      console.log(
+        `⚠️  Session ${sessionId.substring(0, 8)} is ${session.status}, skipping queue processing`
+      );
+      return;
+    }
+
+    console.log(
+      `📬 Processing queued message ${nextMessage.message_id.substring(0, 8)} (position ${nextMessage.queue_position})`
+    );
+
+    // Extract prompt from queued message
+    // NOTE: Queued messages always have string content (validated in createQueued)
+    const prompt = nextMessage.content as string;
+
+    // Verify message still exists (user might have deleted it while we were checking)
+    const messagesService = app.service('messages') as unknown as MessagesServiceImpl;
+    try {
+      const stillExists = await messagesService.get(nextMessage.message_id, params);
+      if (!stillExists || stillExists.status !== 'queued') {
+        console.log(
+          `⚠️  Queued message ${nextMessage.message_id.substring(0, 8)} was deleted or modified, skipping`
+        );
+        return;
+      }
+    } catch (error) {
+      console.log(
+        `⚠️  Queued message ${nextMessage.message_id.substring(0, 8)} no longer exists, skipping`
+      );
+      return;
+    }
+
+    // Delete the queued message (execution will create new messages)
+    // Use the service so the after.remove hook fires and emits the dequeued event
+    await messagesService.remove(nextMessage.message_id, params);
+
+    // Trigger prompt execution via existing endpoint
+    // This creates task, user message, executes agent, etc.
+    const promptService = app.service('/sessions/:id/prompt') as {
+      create: (data: { prompt: string; stream?: boolean }, params: RouteParams) => Promise<unknown>;
+    };
+
+    await promptService.create(
+      {
+        prompt,
+        stream: true,
+      },
+      {
+        ...params,
+        route: { id: sessionId },
+      }
+    );
+
+    console.log(`✅ Queued message triggered for session ${sessionId.substring(0, 8)}`);
+  }
 
   // Permission decision endpoint
   app.use('/sessions/:id/permission-decision', {
