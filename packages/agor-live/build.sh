@@ -130,6 +130,11 @@ cat > "$SCRIPT_DIR/dist/core/package.json" << 'PKGJSON'
       "import": "./feathers/index.js",
       "require": "./feathers/index.cjs"
     },
+    "./lib/feathers-validation": {
+      "types": "./lib/feathers-validation.d.ts",
+      "import": "./lib/feathers-validation.js",
+      "require": "./lib/feathers-validation.cjs"
+    },
     "./templates/handlebars-helpers": {
       "types": "./templates/handlebars-helpers.d.ts",
       "import": "./templates/handlebars-helpers.js",
