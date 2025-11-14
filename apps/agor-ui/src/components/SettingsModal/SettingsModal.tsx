@@ -15,6 +15,7 @@ import type {
 import { Modal, Tabs } from 'antd';
 import { useState } from 'react';
 import { WorktreeModal } from '../WorktreeModal';
+import type { WorktreeUpdate } from '../WorktreeModal/tabs/GeneralTab';
 import { AboutTab } from './AboutTab';
 import { AgenticToolsSection } from './AgenticToolsSection';
 import { BoardsTable } from './BoardsTable';
@@ -52,7 +53,7 @@ export interface SettingsModalProps {
     }
   ) => void;
   onUnarchiveWorktree?: (worktreeId: string, options?: { boardId?: string }) => void;
-  onUpdateWorktree?: (worktreeId: string, updates: Partial<Worktree>) => void;
+  onUpdateWorktree?: (worktreeId: string, updates: WorktreeUpdate) => void;
   onCreateWorktree?: (
     repoId: string,
     data: {
