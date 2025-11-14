@@ -33,7 +33,9 @@ import type { SessionRepository } from '../../db/repositories/sessions';
 import type { WorktreeRepository } from '../../db/repositories/worktrees';
 import type { PermissionMode, SessionID, TaskID } from '../../types';
 import type { TokenUsage } from '../../utils/pricing';
+import { convertConversationToHistory } from './conversation-converter';
 import { DEFAULT_GEMINI_MODEL, type GeminiModel } from './models';
+import { mapPermissionMode } from './permission-mapper';
 import { extractGeminiTokenUsage } from './usage';
 
 /**
@@ -215,7 +217,11 @@ export class GeminiPromptService {
 
               // Normalize tool names to match Claude Code conventions (PascalCase)
               // This ensures UI renderers work consistently across all agents
-              if (name?.toLowerCase() === 'bash' || name === 'ExecuteCommand' || name === 'command') {
+              if (
+                name?.toLowerCase() === 'bash' ||
+                name === 'ExecuteCommand' ||
+                name === 'command'
+              ) {
                 name = 'Bash';
               }
 
@@ -507,18 +513,24 @@ export class GeminiPromptService {
       userId: userIdForApiKey,
       db: this.db,
     });
+
+    // Determine auth type: OAuth if no API key, otherwise API key
+    let authType: AuthType;
     if (resolvedApiKey) {
       process.env.GEMINI_API_KEY = resolvedApiKey;
+      authType = AuthType.USE_GEMINI;
       console.log(
         `🔑 [Gemini] Using per-user/global API key for ${userIdForApiKey?.substring(0, 8) ?? 'unknown user'}`
       );
     } else {
-      // Clear stale API key to ensure SDK fails if no valid key is found
+      // No API key found - use OAuth authentication via Gemini CLI
+      authType = AuthType.LOGIN_WITH_GOOGLE;
+      console.log('🔐 [Gemini] No API key found, using OAuth authentication (Gemini CLI)');
       delete process.env.GEMINI_API_KEY;
     }
 
     // Map Agor permission mode to Gemini ApprovalMode
-    const approvalMode = this.mapPermissionMode(permissionMode || 'ask');
+    const approvalMode = mapPermissionMode(permissionMode || 'ask');
 
     // Check if client exists - NEVER clear the cache to preserve conversation history
     if (this.sessionClients.has(sessionId)) {
@@ -536,8 +548,13 @@ export class GeminiPromptService {
       // Note: refreshAuth() might fail if the key is invalid, but we log and continue
       if (config && typeof config.refreshAuth === 'function') {
         try {
-          await config.refreshAuth(AuthType.USE_GEMINI);
-          console.log(`🔄 [Gemini] Refreshed authentication from process.env.GEMINI_API_KEY`);
+          // Re-determine auth type based on current API key state
+          const currentAuthType = process.env.GEMINI_API_KEY
+            ? AuthType.USE_GEMINI
+            : AuthType.LOGIN_WITH_GOOGLE;
+          await config.refreshAuth(currentAuthType);
+          const authMethod = currentAuthType === AuthType.LOGIN_WITH_GOOGLE ? 'OAuth' : 'API key';
+          console.log(`🔄 [Gemini] Refreshed authentication using ${authMethod}`);
         } catch (error) {
           // Log but don't throw - let the subsequent prompt attempt fail with a better error
           console.warn(
@@ -784,9 +801,12 @@ export class GeminiPromptService {
     // So process.env.GEMINI_API_KEY is already set with the correct per-user or global key
 
     // CRITICAL: Set up authentication (creates ContentGenerator and BaseLlmClient)
-    // Use AuthType.USE_GEMINI for API key authentication
-    // The SDK will look for GEMINI_API_KEY environment variable (set in getOrCreateClient)
-    await config.refreshAuth(AuthType.USE_GEMINI);
+    // Use authType determined above (OAuth or API key)
+    // The SDK will look for GEMINI_API_KEY environment variable (if using API key)
+    // or use OAuth credentials from ~/.gemini/oauth_creds.json (if using OAuth)
+    await config.refreshAuth(authType);
+    const authMethod = authType === AuthType.LOGIN_WITH_GOOGLE ? 'OAuth' : 'API key';
+    console.log(`🔐 [Gemini] Authenticated using ${authMethod}`);
 
     // Try to load existing session file from SDK's filesystem storage
     const resumedSessionData = await this.loadSessionFile(sessionId, workingDirectory);
@@ -813,7 +833,7 @@ export class GeminiPromptService {
 
         // Also restore to client history for API continuity
         // Convert ConversationRecord messages to Content[] format
-        const history = this.convertConversationToHistory(resumedSessionData.conversation);
+        const history = convertConversationToHistory(resumedSessionData.conversation);
         client.setHistory(history);
       }
     }
@@ -837,62 +857,6 @@ export class GeminiPromptService {
    * - AUTO_EDIT: Auto-approve file edits, prompt for shell/web commands
    * - YOLO: Auto-approve all operations
    */
-  private mapPermissionMode(permissionMode: PermissionMode): ApprovalMode {
-    switch (permissionMode) {
-      case 'default':
-      case 'ask':
-        return ApprovalMode.DEFAULT; // Prompt for each tool use
-
-      case 'acceptEdits':
-      case 'auto':
-        // TEMPORARY: Map to YOLO since AUTO_EDIT blocks shell commands in non-interactive mode
-        // TODO: Implement proper approval handling for AUTO_EDIT mode
-        return ApprovalMode.YOLO; // Auto-approve all operations (was: AUTO_EDIT)
-
-      case 'bypassPermissions':
-      case 'allow-all':
-        return ApprovalMode.YOLO; // Auto-approve all operations
-
-      default:
-        return ApprovalMode.DEFAULT;
-    }
-  }
-
-  /**
-   * Convert SDK's ConversationRecord to Gemini Content[] format
-   *
-   * This converts the SDK's session file format into the API format needed for setHistory()
-   */
-  private convertConversationToHistory(conversation: {
-    messages: Array<{
-      type: 'user' | 'gemini';
-      content: unknown;
-    }>;
-  }): Content[] {
-    const history: Content[] = [];
-
-    for (const msg of conversation.messages) {
-      const role = msg.type === 'user' ? 'user' : 'model';
-      const parts: Part[] = [];
-
-      // SDK stores content as PartListUnion (array or single part)
-      const content = msg.content;
-      if (Array.isArray(content)) {
-        // Already in parts format
-        parts.push(...(content as Part[]));
-      } else if (content && typeof content === 'object' && 'text' in content) {
-        // Single part with text
-        parts.push(content as Part);
-      }
-
-      if (parts.length > 0) {
-        history.push({ role: role as 'user' | 'model', parts });
-      }
-    }
-
-    return history;
-  }
-
   /**
    * Update session history after turn completion
    *
