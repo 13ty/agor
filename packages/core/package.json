@@ -95,11 +95,6 @@
       "import": "./dist/utils/errors.js",
       "require": "./dist/utils/errors.cjs"
     },
-    "./utils/pricing": {
-      "types": "./dist/utils/pricing.d.ts",
-      "import": "./dist/utils/pricing.js",
-      "require": "./dist/utils/pricing.cjs"
-    },
     "./utils/url": {
       "types": "./dist/utils/url.d.ts",
       "import": "./dist/utils/url.js",
@@ -119,6 +114,11 @@
       "types": "./dist/utils/context-window.d.ts",
       "import": "./dist/utils/context-window.js",
       "require": "./dist/utils/context-window.cjs"
+    },
+    "./utils/sdk-normalizer": {
+      "types": "./dist/utils/sdk-normalizer.d.ts",
+      "import": "./dist/utils/sdk-normalizer.js",
+      "require": "./dist/utils/sdk-normalizer.cjs"
     },
     "./utils/path": {
       "types": "./dist/utils/path.d.ts",

@@ -93,13 +93,13 @@ import type {
   Message,
   Paginated,
   Params,
+  RawSdkResponse,
   Session,
   SessionID,
   Task,
   User,
 } from '@agor/core/types';
 import { SessionStatus, TaskStatus } from '@agor/core/types';
-import { getContextWindowLimit, getSessionContextUsage } from '@agor/core/utils/context-window';
 import { NotFoundError } from '@agor/core/utils/errors';
 // Import Claude SDK's PermissionMode type for ClaudeTool method signatures
 // (Agor's PermissionMode is a superset of all tool permission modes)
@@ -170,6 +170,7 @@ interface FeathersSocket extends Socket {
 
 // Expand ~ to home directory in database path
 import { expandPath, extractDbFilePath } from '@agor/core/utils/path';
+import { normalizeRawSdkResponse } from '@agor/core/utils/sdk-normalizer';
 
 const DB_PATH = expandPath(process.env.AGOR_DB_PATH || 'file:~/.agor/agor.db');
 
@@ -1560,7 +1561,8 @@ async function main() {
     app.service('sessions'), // Sessions service for permission persistence (WebSocket broadcast)
     worktreesRepo, // Worktrees repo for fetching worktree paths
     reposRepo, // Repos repo for repo-level permissions
-    config.daemon?.mcpEnabled !== false // Pass MCP enabled flag
+    config.daemon?.mcpEnabled !== false, // Pass MCP enabled flag
+    _tasksRepo // Tasks repo for computeContextWindow
   );
 
   // Handle OPENAI_API_KEY with priority: config.yaml > env var
@@ -1580,7 +1582,8 @@ async function main() {
     openaiApiKey,
     app.service('messages'),
     app.service('tasks'),
-    db // Database for env var resolution
+    db, // Database for env var resolution
+    _tasksRepo // Tasks repo for computeContextWindow
   );
 
   if (!openaiApiKey) {
@@ -1601,7 +1604,8 @@ async function main() {
     mcpServerRepo,
     sessionMCPRepo,
     config.daemon?.mcpEnabled !== false, // Pass MCP enabled flag
-    db // Database for env var resolution
+    db, // Database for env var resolution
+    _tasksRepo // Tasks repo for computeContextWindow
   );
 
   // Initialize OpenCodeTool
@@ -1871,6 +1875,7 @@ async function main() {
         let executeMethod: Promise<{
           userMessageId: import('@agor/core/types').MessageID;
           assistantMessageIds: import('@agor/core/types').MessageID[];
+          rawSdkResponse?: unknown; // Raw SDK event (unmutated)
         }>;
 
         if (session.agentic_tool === 'codex') {
@@ -1943,6 +1948,7 @@ async function main() {
             return {
               userMessageId: `user-${task.task_id}` as import('@agor/core/types').MessageID,
               assistantMessageIds: [],
+              rawSdkResponse: undefined,
             };
           });
         } else {
@@ -2009,12 +2015,8 @@ async function main() {
                 // Safe to mark as completed
 
                 // Store raw SDK response - single source of truth for token accounting
-                const rawSdkResponse: import('@agor/core/types').RawSdkResponse | undefined = result
-                  ? ({
-                      tool: session.agentic_tool,
-                      ...result,
-                    } as import('@agor/core/types').RawSdkResponse)
-                  : undefined;
+                // No 'tool' discriminator - use session.agentic_tool to determine SDK type
+                const rawSdkResponse: RawSdkResponse | undefined = result?.rawSdkResponse;
 
                 // Calculate tool_use_count from all messages in this task
                 let toolUseCount = 0;
@@ -2077,6 +2079,68 @@ async function main() {
                     // Store raw SDK response - single source of truth
                     raw_sdk_response: rawSdkResponse,
 
+                    // Compute and store context window (cumulative tokens)
+                    // Must be computed BEFORE patching so it's included in the same DB write
+                    // Pass rawSdkResponse directly - each tool handles it appropriately:
+                    // - Codex/Gemini: extract cumulative tokens from current response
+                    // - Claude Code: sum previous tasks + current task
+                    computed_context_window: await (async () => {
+                      try {
+                        if (!rawSdkResponse) return undefined;
+
+                        if (session.agentic_tool === 'claude-code') {
+                          // Claude Code: sum previous tasks + current task
+                          const previousTasksTotal =
+                            (await claudeTool.computeContextWindow?.(
+                              session.session_id,
+                              task.task_id,
+                              rawSdkResponse
+                            )) || 0;
+                          const normalized = normalizeRawSdkResponse(
+                            rawSdkResponse,
+                            session.agentic_tool
+                          );
+                          const currentTaskTokens =
+                            normalized.tokenUsage.inputTokens + normalized.tokenUsage.outputTokens;
+                          const total = previousTasksTotal + currentTaskTokens;
+                          console.log(
+                            `📊 Context window (claude-code): previous=${previousTasksTotal}, current=${currentTaskTokens}, total=${total}`
+                          );
+                          return total;
+                        }
+
+                        if (session.agentic_tool === 'codex') {
+                          // Codex: SDK provides cumulative tokens, just extract from response
+                          const total =
+                            (await codexTool.computeContextWindow?.(
+                              session.session_id,
+                              task.task_id,
+                              rawSdkResponse
+                            )) || 0;
+                          return total;
+                        }
+
+                        if (session.agentic_tool === 'gemini') {
+                          // Gemini: SDK provides cumulative tokens, just extract from response
+                          const total =
+                            (await geminiTool.computeContextWindow?.(
+                              session.session_id,
+                              task.task_id,
+                              rawSdkResponse
+                            )) || 0;
+                          return total;
+                        }
+
+                        return undefined;
+                      } catch (error) {
+                        console.error(
+                          `❌ Failed to compute context window for task ${task.task_id}:`,
+                          error
+                        );
+                        return undefined;
+                      }
+                    })(),
+
                     // Git state transition tracking
                     git_state: {
                       ...task.git_state,
@@ -2091,25 +2155,7 @@ async function main() {
                 }
               }
 
-              // Calculate session-level context window usage from all tasks
-              // Algorithm from https://codelynx.dev/posts/calculate-claude-code-context
-              const allTasks = await tasksService.find({
-                query: { session_id: id },
-                paginate: false,
-              });
-              const tasksArray = Array.isArray(allTasks) ? allTasks : [];
-
-              const currentContextUsage = getSessionContextUsage(tasksArray as Task[]);
-              const contextWindowLimit = getContextWindowLimit(tasksArray as Task[]);
-
-              if (currentContextUsage !== undefined) {
-                const percentage = contextWindowLimit
-                  ? ((currentContextUsage / contextWindowLimit) * 100).toFixed(1)
-                  : 'N/A';
-                console.log(
-                  `📊 Session context: ${currentContextUsage.toLocaleString()}/${contextWindowLimit?.toLocaleString() || '?'} (${percentage}%)`
-                );
-              }
+              // Token accounting is handled via raw_sdk_response and normalizers
 
               await safePatch(
                 sessionsService,
@@ -2117,10 +2163,7 @@ async function main() {
                 {
                   message_count: session.message_count + totalMessages,
                   status: SessionStatus.IDLE,
-                  current_context_usage: currentContextUsage,
-                  context_window_limit: contextWindowLimit,
-                  last_context_update_at:
-                    currentContextUsage !== undefined ? new Date().toISOString() : undefined,
+                  // Token accounting handled via normalizeRawSdkResponse() - no session-level storage needed
                 },
                 'Session'
               );

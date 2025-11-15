@@ -20,7 +20,7 @@ import type { SessionMCPServerRepository } from '../../db/repositories/session-m
 import type { SessionRepository } from '../../db/repositories/sessions';
 import type { WorktreeRepository } from '../../db/repositories/worktrees';
 import type { PermissionMode, SessionID, TaskID } from '../../types';
-import type { TokenUsage } from '../../utils/pricing';
+import type { TokenUsage } from '../../types/token-usage';
 import { DEFAULT_CODEX_MODEL } from './models';
 import { extractCodexTokenUsage } from './usage';
 
@@ -99,6 +99,7 @@ export type CodexStreamEvent =
       threadId: string;
       resolvedModel?: string;
       usage?: TokenUsage;
+      rawSdkEvent?: import('../../types/sdk-response').CodexSdkResponse; // The actual turn.completed event from Codex SDK
     };
 
 export class CodexPromptService {
@@ -665,6 +666,7 @@ ${networkAccessToml}${mcpServersToml}`;
               threadId,
               resolvedModel: resolvedModel || DEFAULT_CODEX_MODEL,
               usage: mappedUsage,
+              rawSdkEvent: event, // Pass through the actual SDK event (UNMUTATED)
             };
 
             // Reset for next message

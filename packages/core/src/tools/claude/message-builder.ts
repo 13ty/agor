@@ -8,7 +8,7 @@
 import { generateId } from '../../lib/ids';
 import type { Message, MessageID, SessionID, TaskID } from '../../types';
 import { MessageRole } from '../../types';
-import type { TokenUsage } from '../../utils/pricing';
+import type { TokenUsage } from '../../types/token-usage';
 import type { MessagesService, TasksService } from './claude-tool';
 import { DEFAULT_CLAUDE_MODEL } from './models';
 

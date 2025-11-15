@@ -311,7 +311,6 @@ export const ConversationView = React.memo<ConversationViewProps>(
             isExpanded={expandedTaskIds.has(task.task_id)}
             onExpandChange={(expanded) => handleTaskExpandChange(task.task_id, expanded)}
             sessionId={sessionId}
-            streamingMessagesForTask={streamingMessagesByTask.get(task.task_id) || new Map()}
             onPermissionDecision={onPermissionDecision}
             worktreeName={worktreeName}
             scheduledFromWorktree={scheduledFromWorktree}

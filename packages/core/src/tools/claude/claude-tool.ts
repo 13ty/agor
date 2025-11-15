@@ -16,6 +16,7 @@ import type { MessagesRepository } from '../../db/repositories/messages';
 import type { RepoRepository } from '../../db/repositories/repos';
 import type { SessionMCPServerRepository } from '../../db/repositories/session-mcp-servers';
 import type { SessionRepository } from '../../db/repositories/sessions';
+import type { TaskRepository } from '../../db/repositories/tasks';
 import type { WorktreeRepository } from '../../db/repositories/worktrees';
 import { withSessionGuard } from '../../db/session-guard';
 import { generateId } from '../../lib/ids';
@@ -25,16 +26,13 @@ import {
   type MessageID,
   MessageRole,
   type SessionID,
+  type Task,
   type TaskID,
   TaskStatus,
 } from '../../types';
-import type {
-  ClaudeCodeSdkResponse,
-  NormalizedSdkResponse,
-  RawSdkResponse,
-} from '../../types/sdk-response';
-import { calculateModelContextWindowUsage } from '../../utils/context-window';
-import type { TokenUsage } from '../../utils/pricing';
+import type { NormalizedSdkResponse, RawSdkResponse } from '../../types/sdk-response';
+// Removed import of calculateModelContextWindowUsage - inlined instead
+import type { TokenUsage } from '../../types/token-usage';
 import type { ImportOptions, ITool, SessionData, ToolCapabilities } from '../base';
 import { loadClaudeSession } from './import/load-session';
 import { transcriptsToMessages } from './import/message-converter';
@@ -46,6 +44,7 @@ import {
   extractTokenUsage,
 } from './message-builder';
 import type { ProcessedEvent } from './message-processor';
+import { ClaudeCodeNormalizer } from './normalizer';
 import { ClaudePromptService } from './prompt-service';
 
 /**
@@ -96,7 +95,8 @@ export class ClaudeTool implements ITool {
     sessionsService?: SessionsService,
     worktreesRepo?: WorktreeRepository,
     reposRepo?: RepoRepository,
-    mcpEnabled?: boolean
+    mcpEnabled?: boolean,
+    private tasksRepo?: TaskRepository
   ) {
     if (messagesRepo && sessionsRepo) {
       this.promptService = new ClaudePromptService(
@@ -198,6 +198,7 @@ export class ClaudeTool implements ITool {
     contextWindowLimit?: number;
     model?: string;
     modelUsage?: unknown;
+    rawSdkResponse?: import('@anthropic-ai/claude-agent-sdk/sdk').SDKResultMessage;
   }> {
     if (!this.promptService || !this.messagesRepo) {
       throw new Error('ClaudeTool not initialized with repositories for live execution');
@@ -258,6 +259,7 @@ export class ClaudeTool implements ITool {
     let contextWindow: number | undefined;
     let contextWindowLimit: number | undefined;
     let modelUsage: unknown | undefined;
+    let rawSdkResponse: import('@anthropic-ai/claude-agent-sdk/sdk').SDKResultMessage | undefined;
 
     for await (const event of this.promptService.promptSessionStreaming(
       sessionId,
@@ -396,6 +398,11 @@ export class ClaudeTool implements ITool {
         }
       }
 
+      // Capture raw SDK response for token accounting
+      if (event.type === 'result') {
+        rawSdkResponse = event.raw_sdk_message;
+      }
+
       // Capture metadata from result events (SDK may not type this properly)
       if ('token_usage' in event && event.token_usage) {
         tokenUsage = extractTokenUsage(event.token_usage);
@@ -405,55 +412,8 @@ export class ClaudeTool implements ITool {
       }
       if ('model_usage' in event && event.model_usage) {
         // Save full model usage for later (per-model breakdown)
+        // Token accounting now handled by ClaudeCodeNormalizer.normalizeMultiModel()
         modelUsage = event.model_usage;
-
-        // Extract context window data from model usage
-        const modelUsageTyped = event.model_usage as Record<
-          string,
-          {
-            inputTokens: number;
-            outputTokens: number;
-            cacheReadInputTokens?: number;
-            cacheCreationInputTokens?: number;
-            contextWindow: number;
-          }
-        >;
-        // Sum ALL token fields across ALL models
-        // When multiple models are used (e.g., Sonnet + Haiku for tools/thinking),
-        // all their tokens contribute to the total
-        let totalInput = 0;
-        let totalOutput = 0;
-        let totalCacheRead = 0;
-        let totalCacheCreation = 0;
-        let totalUsage = 0;
-        let maxLimit = 0;
-        for (const modelData of Object.values(modelUsageTyped)) {
-          totalInput += modelData.inputTokens || 0;
-          totalOutput += modelData.outputTokens || 0;
-          totalCacheRead += modelData.cacheReadInputTokens || 0;
-          totalCacheCreation += modelData.cacheCreationInputTokens || 0;
-
-          const usage = calculateModelContextWindowUsage(modelData);
-          const limit = modelData.contextWindow || 0;
-          totalUsage += usage; // Sum across all models
-          maxLimit = Math.max(maxLimit, limit); // Track largest context window limit
-        }
-
-        // Override tokenUsage with summed values across all models
-        // (SDK's top-level token_usage only reflects primary model)
-        tokenUsage = {
-          input_tokens: totalInput,
-          output_tokens: totalOutput,
-          cache_read_tokens: totalCacheRead,
-          cache_creation_tokens: totalCacheCreation,
-          total_tokens: totalInput + totalOutput,
-        };
-
-        contextWindow = totalUsage;
-        contextWindowLimit = maxLimit;
-        console.log(
-          `🔍 [ClaudeTool] Context window: ${contextWindow}/${contextWindowLimit} (${((contextWindow / contextWindowLimit) * 100).toFixed(1)}%)`
-        );
       }
 
       // Handle partial streaming events (token-level chunks)
@@ -600,6 +560,7 @@ export class ClaudeTool implements ITool {
       contextWindowLimit,
       model: resolvedModel,
       modelUsage,
+      rawSdkResponse,
     };
   }
 
@@ -660,6 +621,7 @@ export class ClaudeTool implements ITool {
     contextWindowLimit?: number;
     model?: string;
     modelUsage?: unknown;
+    rawSdkResponse?: import('@anthropic-ai/claude-agent-sdk/sdk').SDKResultMessage;
   }> {
     if (!this.promptService || !this.messagesRepo) {
       throw new Error('ClaudeTool not initialized with repositories for live execution');
@@ -691,6 +653,7 @@ export class ClaudeTool implements ITool {
     let contextWindow: number | undefined;
     let contextWindowLimit: number | undefined;
     let modelUsage: unknown | undefined;
+    let rawSdkResponse: import('@anthropic-ai/claude-agent-sdk/sdk').SDKResultMessage | undefined;
 
     for await (const event of this.promptService.promptSessionStreaming(
       sessionId,
@@ -709,6 +672,11 @@ export class ClaudeTool implements ITool {
         await this.captureAgentSessionId(sessionId, capturedAgentSessionId);
       }
 
+      // Capture raw SDK response for token accounting
+      if (event.type === 'result') {
+        rawSdkResponse = event.raw_sdk_message;
+      }
+
       // Capture metadata from result events (SDK may not type this properly)
       if ('token_usage' in event && event.token_usage) {
         tokenUsage = extractTokenUsage(event.token_usage);
@@ -718,55 +686,8 @@ export class ClaudeTool implements ITool {
       }
       if ('model_usage' in event && event.model_usage) {
         // Save full model usage for later (per-model breakdown)
+        // Token accounting now handled by ClaudeCodeNormalizer.normalizeMultiModel()
         modelUsage = event.model_usage;
-
-        // Extract context window data from model usage
-        const modelUsageTyped = event.model_usage as Record<
-          string,
-          {
-            inputTokens: number;
-            outputTokens: number;
-            cacheReadInputTokens?: number;
-            cacheCreationInputTokens?: number;
-            contextWindow: number;
-          }
-        >;
-        // Sum ALL token fields across ALL models
-        // When multiple models are used (e.g., Sonnet + Haiku for tools/thinking),
-        // all their tokens contribute to the total
-        let totalInput = 0;
-        let totalOutput = 0;
-        let totalCacheRead = 0;
-        let totalCacheCreation = 0;
-        let totalUsage = 0;
-        let maxLimit = 0;
-        for (const modelData of Object.values(modelUsageTyped)) {
-          totalInput += modelData.inputTokens || 0;
-          totalOutput += modelData.outputTokens || 0;
-          totalCacheRead += modelData.cacheReadInputTokens || 0;
-          totalCacheCreation += modelData.cacheCreationInputTokens || 0;
-
-          const usage = calculateModelContextWindowUsage(modelData);
-          const limit = modelData.contextWindow || 0;
-          totalUsage += usage; // Sum across all models
-          maxLimit = Math.max(maxLimit, limit); // Track largest context window limit
-        }
-
-        // Override tokenUsage with summed values across all models
-        // (SDK's top-level token_usage only reflects primary model)
-        tokenUsage = {
-          input_tokens: totalInput,
-          output_tokens: totalOutput,
-          cache_read_tokens: totalCacheRead,
-          cache_creation_tokens: totalCacheCreation,
-          total_tokens: totalInput + totalOutput,
-        };
-
-        contextWindow = totalUsage;
-        contextWindowLimit = maxLimit;
-        console.log(
-          `🔍 [ClaudeTool] Context window: ${contextWindow}/${contextWindowLimit} (${((contextWindow / contextWindowLimit) * 100).toFixed(1)}%)`
-        );
       }
 
       // Skip partial events in non-streaming mode
@@ -839,6 +760,7 @@ export class ClaudeTool implements ITool {
       contextWindowLimit,
       model: resolvedModel,
       modelUsage,
+      rawSdkResponse,
     };
   }
 
@@ -888,56 +810,99 @@ export class ClaudeTool implements ITool {
   /**
    * Normalize Claude SDK response to common format
    *
-   * Converts Claude-specific fields to normalized structure.
+   * @deprecated This method is deprecated - use normalizeRawSdkResponse() from utils/sdk-normalizer instead
+   * This stub remains for API compatibility but should not be used.
    */
-  normalizedSdkResponse(rawResponse: RawSdkResponse): NormalizedSdkResponse {
-    if (rawResponse.tool !== 'claude-code') {
-      throw new Error(`Expected claude-code response, got ${rawResponse.tool}`);
+  normalizedSdkResponse(_rawResponse: RawSdkResponse): NormalizedSdkResponse {
+    throw new Error(
+      'normalizedSdkResponse() is deprecated - use normalizeRawSdkResponse() from utils/sdk-normalizer instead'
+    );
+  }
+
+  /**
+   * Compute cumulative context window usage for a Claude Code session
+   *
+   * Algorithm:
+   * 1. Start from the most recent task (iterate backwards)
+   * 2. Sum input + output tokens from each task's raw_sdk_response
+   * 3. Stop when we encounter a compaction event (system message with systemType='compaction')
+   * 4. Exclude the current task (if provided) since it's not complete yet
+   *
+   * This ensures we only count tokens since the last compaction event,
+   * as compaction resets the context window.
+   *
+   * @param sessionId - Session ID to compute context for
+   * @param currentTaskId - Current task ID (to exclude from computation)
+   * @returns Promise resolving to computed context window usage in tokens
+   */
+  async computeContextWindow(
+    sessionId: string,
+    currentTaskId?: string,
+    _currentRawSdkResponse?: unknown
+  ): Promise<number> {
+    if (!this.tasksRepo || !this.messagesRepo) {
+      console.warn('computeContextWindow: repos not available, returning 0');
+      return 0;
     }
 
-    const claudeResponse = rawResponse as ClaudeCodeSdkResponse;
+    // Get all tasks for this session, sorted by created_at DESC (most recent first)
+    const tasks = await this.tasksRepo.findBySession(sessionId as SessionID);
 
-    // Extract token usage with defaults
-    const tokenUsage = claudeResponse.tokenUsage || {
-      input_tokens: 0,
-      output_tokens: 0,
-      total_tokens: 0,
-      cache_read_tokens: 0,
-      cache_creation_tokens: 0,
-    };
+    // Sort tasks by created_at descending (most recent first)
+    tasks.sort((a: Task, b: Task) => {
+      const dateA = new Date(a.created_at).getTime();
+      const dateB = new Date(b.created_at).getTime();
+      return dateB - dateA;
+    });
 
-    // Build per-model usage if available
-    let perModelUsage: NormalizedSdkResponse['perModelUsage'];
-    if (claudeResponse.modelUsage) {
-      perModelUsage = {};
-      for (const [modelId, usage] of Object.entries(claudeResponse.modelUsage)) {
-        perModelUsage[modelId] = {
-          inputTokens: usage.inputTokens || 0,
-          outputTokens: usage.outputTokens || 0,
-          cacheReadTokens: usage.cacheReadInputTokens || 0,
-          cacheCreationTokens: usage.cacheCreationInputTokens || 0,
-          contextWindowLimit: usage.contextWindow || 0,
-        };
+    let cumulativeTokens = 0;
+    const normalizer = new ClaudeCodeNormalizer();
+
+    // Iterate backwards through tasks (from most recent to oldest)
+    for (const task of tasks) {
+      // Skip the current task if specified (it's not complete yet)
+      if (currentTaskId && task.task_id === currentTaskId) {
+        continue;
+      }
+
+      // Check if this task has a compaction event in its messages
+      // If so, we stop here (context was reset)
+      const taskMessages = await this.messagesRepo.findByTaskId(task.task_id);
+      const hasCompaction = taskMessages.some((msg) => {
+        if (msg.role !== MessageRole.SYSTEM) return false;
+
+        // Check if message content contains compaction event
+        const content = msg.content;
+        if (Array.isArray(content)) {
+          return content.some(
+            (block: { type?: string; systemType?: string }) =>
+              block.type === 'system_complete' && block.systemType === 'compaction'
+          );
+        }
+        return false;
+      });
+
+      if (hasCompaction) {
+        // Found a compaction event - stop accumulating tokens
+        console.log(
+          `🗜️  Compaction event found in task ${task.task_id}, stopping token accumulation`
+        );
+        break;
+      }
+
+      // Accumulate tokens from this task's SDK response
+      if (task.raw_sdk_response) {
+        // biome-ignore lint/suspicious/noExplicitAny: raw_sdk_response is unknown, cast to normalizer's expected type
+        const normalized = normalizer.normalize(task.raw_sdk_response as any);
+        const taskTokens = normalized.tokenUsage.inputTokens + normalized.tokenUsage.outputTokens;
+        cumulativeTokens += taskTokens;
+        console.log(
+          `📊 Task ${task.task_id}: +${taskTokens} tokens (cumulative: ${cumulativeTokens})`
+        );
       }
     }
 
-    return {
-      userMessageId: claudeResponse.userMessageId,
-      assistantMessageIds: claudeResponse.assistantMessageIds,
-      tokenUsage: {
-        inputTokens: tokenUsage.input_tokens || 0,
-        outputTokens: tokenUsage.output_tokens || 0,
-        totalTokens:
-          tokenUsage.total_tokens || tokenUsage.input_tokens! + tokenUsage.output_tokens! || 0,
-        cacheReadTokens: tokenUsage.cache_read_tokens || 0,
-        cacheCreationTokens: tokenUsage.cache_creation_tokens || 0,
-      },
-      contextWindow: claudeResponse.contextWindow,
-      contextWindowLimit: claudeResponse.contextWindowLimit,
-      model: claudeResponse.model,
-      durationMs: claudeResponse.durationMs,
-      agentSessionId: claudeResponse.agentSessionId,
-      perModelUsage,
-    };
+    console.log(`✅ Computed context window for session ${sessionId}: ${cumulativeTokens} tokens`);
+    return cumulativeTokens;
   }
 }
