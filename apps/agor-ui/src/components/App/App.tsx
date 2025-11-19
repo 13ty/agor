@@ -541,12 +541,30 @@ export const App: React.FC<AppProps> = ({
             hasRepos={repoById.size > 0}
           />
         </div>
+        {/* Event Stream Panel with rich pills */}
         <EventStreamPanel
           collapsed={eventStreamPanelCollapsed}
           onToggleCollapse={() => setEventStreamPanelCollapsed(!eventStreamPanelCollapsed)}
           events={events}
           onClear={clearEvents}
           worktreeById={worktreeById}
+          sessionById={sessionById}
+          sessionsByWorktree={sessionsByWorktree}
+          repos={mapToArray(repoById)}
+          userById={userById}
+          currentUserId={user?.user_id}
+          selectedSessionId={selectedSessionId}
+          worktreeActions={{
+            onSessionClick: setSelectedSessionId,
+            onCreateSession: (worktreeId) => setNewSessionWorktreeId(worktreeId),
+            onForkSession,
+            onSpawnSession,
+            onOpenTerminal: handleOpenTerminal,
+            onStartEnvironment,
+            onStopEnvironment,
+            onOpenSettings: (worktreeId) => setWorktreeModalWorktreeId(worktreeId),
+            onViewLogs: (worktreeId) => setLogsModalWorktreeId(worktreeId),
+          }}
         />
       </Content>
       {newSessionWorktreeId && (
