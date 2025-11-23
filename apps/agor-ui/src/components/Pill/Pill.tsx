@@ -1,5 +1,6 @@
-import type { AgenticToolName, SessionStatus, TaskStatus } from '@agor/core/types';
-import { normalizeRawSdkResponse } from '@agor/core/utils/sdk-normalizer';
+import type { SessionStatus, TaskStatus } from '@agor/core/types';
+// TODO: Move normalization to DB or daemon API
+// import { normalizeRawSdkResponse } from '@agor/core/utils/sdk-normalizer';
 import {
   ApartmentOutlined,
   BranchesOutlined,
@@ -195,13 +196,10 @@ const ContextWindowPopoverContent: React.FC<{
   // Build collapsible items for advanced sections
   const advancedItems = [];
 
-  // Extract and normalize SDK response
+  // Get SDK response from task metadata
   const sdkResponse = taskMetadata?.raw_sdk_response;
-  const agenticTool = taskMetadata?.agentic_tool as AgenticToolName | undefined;
-
-  // Normalize SDK response to get standardized token breakdown
-  const normalized =
-    sdkResponse && agenticTool ? normalizeRawSdkResponse(sdkResponse, agenticTool) : null;
+  // biome-ignore lint/suspicious/noExplicitAny: Legacy normalized_sdk_response stub for compatibility
+  const normalized: any = null;
 
   // Add per-model usage if available (Claude Code multi-model)
   // Check for modelUsage field (only Claude SDK has this)
