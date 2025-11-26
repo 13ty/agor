@@ -796,6 +796,12 @@ async function main() {
 
     // Build spawn command with optional Unix user impersonation
     const executorUnixUser = config.execution?.executor_unix_user;
+
+    // Determine permission mode: explicit override > session config > 'default'
+    // This ensures session settings (like bypassPermissions) are preserved unless explicitly overridden
+    const effectivePermissionMode =
+      data.permissionMode || session.permission_config?.mode || 'default';
+
     const nodeArgs = [
       executorPath,
       '--session-token',
@@ -809,7 +815,7 @@ async function main() {
       '--tool',
       session.agentic_tool,
       '--permission-mode',
-      data.permissionMode || 'default',
+      effectivePermissionMode,
       '--daemon-url',
       daemonUrl,
     ];
