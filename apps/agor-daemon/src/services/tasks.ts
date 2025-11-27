@@ -178,6 +178,14 @@ export class TasksService extends DrizzleService<Task, Partial<Task>, TaskParams
           if (session.genealogy?.parent_session_id) {
             await this.queueParentCallback(task, session, params);
           }
+
+          // IMPORTANT: Now that session is idle, process any queued messages (including callbacks)
+          // This handles the case where callbacks were queued while this session was running
+          // biome-ignore lint/suspicious/noExplicitAny: Service type casting required for custom method access
+          const sessionsService = this.app.service('sessions') as any;
+          if (sessionsService.triggerQueueProcessing) {
+            await sessionsService.triggerQueueProcessing(task.session_id);
+          }
         } catch (error) {
           console.error('❌ [TasksService] Failed to process task completion:', error);
         }
@@ -307,27 +315,31 @@ export class TasksService extends DrizzleService<Task, Partial<Task>, TaskParams
       // Queue message to parent session with special metadata
       const messageRepo = new MessagesRepository(this.db);
 
+      // Validate parent session has a creator for authentication
+      if (!parentSession.created_by) {
+        console.warn(
+          `⚠️  [TasksService] Cannot queue callback: parent session ${parentSessionId.substring(0, 8)} has no creator (anonymous session)`
+        );
+        return;
+      }
+
       // Create queued message with Agor callback metadata
+      // IMPORTANT: Include queued_by_user_id so authentication works when processing the callback
+      // Use the parent session's creator as the user context for callback execution
       await messageRepo.createQueued(parentSessionId, callbackMessage, {
         is_agor_callback: true,
         source: 'agor',
         child_session_id: childSession.session_id,
         child_task_id: task.task_id,
+        queued_by_user_id: parentSession.created_by,
       });
 
       console.log(
         `🔔 Queued callback to parent ${parentSessionId.substring(0, 8)} from child ${childSession.session_id.substring(0, 8)}`
       );
 
-      // If parent is idle, trigger queue processing immediately
-      if (parentSession.status === 'idle') {
-        // Trigger queue processing via custom method
-        // NOTE: DO NOT pass params here - params are from child session context (executor),
-        // but queue processing should run in parent session context
-        // biome-ignore lint/suspicious/noExplicitAny: Service type casting required for custom method access
-        const sessionsService = this.app.service('sessions') as any;
-        await sessionsService.triggerQueueProcessing(parentSessionId);
-      }
+      // NOTE: Queue processing is handled automatically via task completion hook (line 182-188)
+      // When parent session becomes idle, it will process all queued messages including this callback
     } catch (error) {
       console.error(
         `❌ [TasksService] Failed to queue parent callback for session ${childSession.session_id}:`,
