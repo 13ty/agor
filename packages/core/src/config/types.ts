@@ -151,6 +151,12 @@ export interface AgorExecutionSettings {
   /** Unix user to run executors as (default: undefined = run as daemon user). When set, uses sudo impersonation. */
   executor_unix_user?: string;
 
+  /** Unix user mode: simple (no isolation), insulated (worktree groups), opportunistic (insulated + process impersonation if possible), strict (enforce process impersonation) */
+  unix_user_mode?: 'simple' | 'insulated' | 'opportunistic' | 'strict';
+
+  /** Enable worktree RBAC and ownership system (default: false). When enabled, enforces permission checks and Unix group isolation. */
+  worktree_rbac?: boolean;
+
   /** Session token expiration in ms (default: 86400000 = 24 hours) */
   session_token_expiration_ms?: number;
 

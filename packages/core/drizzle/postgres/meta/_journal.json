@@ -43,6 +43,20 @@
       "when": 1764210814788,
       "tag": "0005_absent_roxanne_simpson",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1764659067920,
+      "tag": "0006_lonely_kid_colt",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1764659200000,
+      "tag": "0007_backfill_session_unix_username",
+      "breakpoints": true
     }
   ]
 }

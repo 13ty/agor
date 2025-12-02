@@ -26,9 +26,9 @@ CORE_PID=$!
 
 # Wait for initial watch build to complete
 # tsup --watch does a full build on startup, then watches for changes
-# We need to wait for both .js files AND .d.ts files to avoid TypeScript race conditions
+# IMPORTANT: Wait for .d.ts files too, not just .js files (needed for TypeScript packages)
 echo "⏳ Waiting for @agor/core initial build..."
-while [ ! -f "/app/packages/core/dist/index.js" ] || [ ! -f "/app/packages/core/dist/utils/logger.js" ]; do
+while [ ! -f "/app/packages/core/dist/index.js" ] || [ ! -f "/app/packages/core/dist/utils/logger.js" ] || [ ! -f "/app/packages/core/dist/index.d.ts" ]; do
   sleep 0.1
 done
 echo "⏳ Waiting for @agor/core type definitions..."
@@ -73,14 +73,68 @@ if [ "$AGOR_USE_EXECUTOR" = "true" ]; then
   fi
 fi
 
+# Configure RBAC settings from environment (set by postgres entrypoint)
+if [ "$AGOR_SET_RBAC_FLAG" = "true" ] || [ -n "$AGOR_SET_UNIX_MODE" ]; then
+  echo "🔐 Configuring RBAC settings..."
+
+  # Enable worktree RBAC if flag is set
+  if [ "$AGOR_SET_RBAC_FLAG" = "true" ]; then
+    if ! grep -q "worktree_rbac" /home/agor/.agor/config.yaml 2>/dev/null; then
+      sed -i '/^execution:/a\  worktree_rbac: true' /home/agor/.agor/config.yaml
+      echo "✅ Worktree RBAC enabled"
+    else
+      # Update existing value to true
+      sed -i 's/worktree_rbac:.*/worktree_rbac: true/' /home/agor/.agor/config.yaml
+      echo "✅ Worktree RBAC updated to enabled"
+    fi
+  fi
+
+  # Set Unix user mode if provided
+  if [ -n "$AGOR_SET_UNIX_MODE" ]; then
+    if ! grep -q "unix_user_mode" /home/agor/.agor/config.yaml 2>/dev/null; then
+      sed -i "/^execution:/a\  unix_user_mode: $AGOR_SET_UNIX_MODE" /home/agor/.agor/config.yaml
+      echo "✅ Unix user mode set to: $AGOR_SET_UNIX_MODE"
+    else
+      # Update existing value
+      sed -i "s/unix_user_mode:.*/unix_user_mode: $AGOR_SET_UNIX_MODE/" /home/agor/.agor/config.yaml
+      echo "✅ Unix user mode updated to: $AGOR_SET_UNIX_MODE"
+    fi
+  fi
+fi
+
 # Always create/update admin user (safe: only upserts)
 echo "👤 Ensuring default admin user exists..."
-pnpm --filter @agor/cli exec tsx bin/dev.ts user create-admin --force
+ADMIN_OUTPUT=$(pnpm --filter @agor/cli exec tsx bin/dev.ts user create-admin --force 2>&1)
+echo "$ADMIN_OUTPUT"
+
+# Get FULL admin user UUID from database (the CLI only shows short ID)
+# Use dedicated script to query the database
+echo "🔍 Querying admin user ID from database..."
+# Clear tsx cache to ensure fresh module resolution
+rm -rf /app/node_modules/.tsx 2>/dev/null || true
+ADMIN_USER_ID=$(cd /app && ./node_modules/.bin/tsx scripts/get-admin-id.ts 2>&1 || echo "")
+if [ -z "$ADMIN_USER_ID" ]; then
+  echo "⚠️  Warning: Failed to query admin user ID"
+else
+  echo "✅ Admin user ID: $ADMIN_USER_ID"
+fi
 
 # Run seed script if SEED=true (idempotent: only runs if no data exists)
 if [ "$SEED" = "true" ]; then
   echo "🌱 Seeding development fixtures..."
-  pnpm tsx scripts/seed.ts --skip-if-exists
+  if [ -n "$ADMIN_USER_ID" ]; then
+    echo "   Using admin user: ${ADMIN_USER_ID}..."
+    pnpm tsx scripts/seed.ts --skip-if-exists --user-id "$ADMIN_USER_ID"
+  else
+    echo "⚠️  Warning: Could not find admin user, seeding with anonymous"
+    pnpm tsx scripts/seed.ts --skip-if-exists
+  fi
+fi
+
+# Create RBAC test users if enabled (PostgreSQL + RBAC mode)
+if [ "$CREATE_RBAC_TEST_USERS" = "true" ]; then
+  echo "👥 Creating RBAC test users and worktrees..."
+  pnpm tsx scripts/create-rbac-test-users.ts
 fi
 
 # Start daemon in background (use dev:daemon-only to avoid duplicate core watch)

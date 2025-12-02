@@ -40,6 +40,7 @@ export class SessionRepository implements BaseRepository<Session, Partial<Sessio
         ? new Date(row.updated_at).toISOString()
         : new Date(row.created_at).toISOString(),
       created_by: row.created_by,
+      unix_username: row.unix_username || null,
       worktree_id: row.worktree_id as UUID,
       ...row.data,
       tasks: row.data.tasks.map((id) => id as UUID),
@@ -82,6 +83,7 @@ export class SessionRepository implements BaseRepository<Session, Partial<Sessio
       status: session.status ?? SessionStatus.IDLE,
       agentic_tool: session.agentic_tool ?? 'claude-code',
       created_by: session.created_by ?? 'anonymous',
+      unix_username: session.unix_username ?? null, // Stamped at creation time by setSessionUnixUsername hook
       board_id: null, // Board ID tracked separately in boards.sessions array
       parent_session_id: session.genealogy?.parent_session_id ?? null,
       forked_from_session_id: session.genealogy?.forked_from_session_id ?? null,

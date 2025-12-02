@@ -1,9 +1,11 @@
-import type { Board, Repo, Session, Worktree } from '@agor/core/types';
+import type { AgorClient } from '@agor/core/api';
+import type { Board, Repo, Session, User, Worktree } from '@agor/core/types';
 import { DeleteOutlined, FolderOutlined, LinkOutlined } from '@ant-design/icons';
 import { Button, Descriptions, Form, Input, Select, Space, Tag, Typography } from 'antd';
 import { useEffect, useState } from 'react';
 import { useThemedMessage } from '../../../utils/message';
 import { ArchiveDeleteWorktreeModal } from '../../ArchiveDeleteWorktreeModal';
+import { OwnersSection } from '../components/OwnersSection';
 
 const { TextArea } = Input;
 
@@ -22,6 +24,8 @@ interface GeneralTabProps {
   repo: Repo;
   sessions: Session[]; // Used to count sessions for this worktree
   boards?: Board[];
+  client?: AgorClient | null;
+  currentUser?: User | null;
   onUpdate?: (worktreeId: string, updates: WorktreeUpdate) => void;
   onArchiveOrDelete?: (
     worktreeId: string,
@@ -38,6 +42,8 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
   repo,
   sessions,
   boards = [],
+  client = null,
+  currentUser,
   onUpdate,
   onArchiveOrDelete,
   onClose,
@@ -51,6 +57,8 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
   const [prUrl, setPrUrl] = useState(worktree.pull_request_url || '');
   const [notes, setNotes] = useState(worktree.notes || '');
   const [archiveDeleteModalOpen, setArchiveDeleteModalOpen] = useState(false);
+  const [owners, setOwners] = useState<User[]>([]);
+  const [loadingOwners, setLoadingOwners] = useState(true);
 
   // Only sync local state on first mount, not on every prop change (to prevent overwriting user input)
   useEffect(() => {
@@ -68,6 +76,42 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
     worktree.pull_request_url,
     worktree.notes,
   ]);
+
+  // Load worktree owners to check edit permissions
+  useEffect(() => {
+    if (!client) {
+      setLoadingOwners(false);
+      return;
+    }
+
+    const loadOwners = async () => {
+      try {
+        setLoadingOwners(true);
+        const ownersResponse = await client.service('worktrees/:id/owners').find({
+          route: { id: worktree.worktree_id },
+        });
+        setOwners(ownersResponse as User[]);
+      } catch (_error) {
+        // If RBAC is disabled or service not found, allow all edits
+        console.log('Could not load owners, allowing edits');
+        setOwners([]);
+      } finally {
+        setLoadingOwners(false);
+      }
+    };
+
+    loadOwners();
+  }, [client, worktree.worktree_id]);
+
+  // Check if current user can edit this worktree
+  // Owners can edit, AND admins have super powers (can edit any worktree)
+  const currentUserId = currentUser?.user_id;
+  const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'owner';
+  const isOwner = owners.some((o) => o.user_id === currentUserId);
+
+  // While loading, assume admins can edit (we know their role immediately)
+  // After loading, check ownership OR admin status
+  const canEdit = loadingOwners ? isAdmin : isAdmin || isOwner;
 
   const hasChanges =
     boardId !== worktree.board_id ||
@@ -167,6 +211,7 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
                 onChange={setBoardId}
                 placeholder="Select board (optional)..."
                 allowClear
+                disabled={!canEdit}
                 options={boards.map((board) => ({
                   value: board.board_id,
                   label: `${board.icon || '📋'} ${board.name}`,
@@ -180,6 +225,7 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
                 onChange={(e) => setIssueUrl(e.target.value)}
                 placeholder="https://github.com/user/repo/issues/42"
                 prefix={<LinkOutlined />}
+                disabled={!canEdit}
               />
             </Form.Item>
 
@@ -189,6 +235,7 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
                 onChange={(e) => setPrUrl(e.target.value)}
                 placeholder="https://github.com/user/repo/pull/43"
                 prefix={<LinkOutlined />}
+                disabled={!canEdit}
               />
             </Form.Item>
 
@@ -198,10 +245,14 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
                 onChange={(e) => setNotes(e.target.value)}
                 placeholder="Freeform notes about this worktree..."
                 rows={4}
+                disabled={!canEdit}
               />
             </Form.Item>
           </Form>
         </div>
+
+        {/* Owners & Permissions */}
+        <OwnersSection worktree={worktree} client={client} currentUser={currentUser} />
 
         {/* Timestamps */}
         <Descriptions column={2} bordered size="small">
@@ -215,13 +266,18 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
 
         {/* Actions */}
         <Space>
-          <Button type="primary" onClick={handleSave} disabled={!hasChanges}>
+          <Button type="primary" onClick={handleSave} disabled={!hasChanges || !canEdit}>
             Save Changes
           </Button>
           <Button onClick={handleCancel} disabled={!hasChanges}>
             Cancel
           </Button>
-          <Button danger icon={<DeleteOutlined />} onClick={() => setArchiveDeleteModalOpen(true)}>
+          <Button
+            danger
+            icon={<DeleteOutlined />}
+            onClick={() => setArchiveDeleteModalOpen(true)}
+            disabled={!canEdit}
+          >
             Archive/Delete Worktree
           </Button>
           {/* TODO: Add "Open in Terminal" button once terminal integration is ready */}

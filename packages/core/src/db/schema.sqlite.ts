@@ -41,6 +41,12 @@ export const sessions = sqliteTable(
     // User attribution
     created_by: text('created_by', { length: 36 }).notNull().default('anonymous'),
 
+    // Unix username for SDK impersonation (immutable once set)
+    // Set from creator's unix_username at session creation time
+    // NEVER changes, even if user's unix_username changes later
+    // This ensures SDK session data remains accessible in the original home directory
+    unix_username: text('unix_username'),
+
     // Materialized for filtering/joins (cross-DB compatible)
     status: text('status', {
       enum: ['idle', 'running', 'stopping', 'awaiting_permission', 'completed', 'failed'],
@@ -404,6 +410,21 @@ export const worktrees = sqliteTable(
       enum: ['preserved', 'cleaned', 'deleted'],
     }),
 
+    // RBAC: App-layer permissions (rbac.md)
+    others_can: text('others_can', {
+      enum: ['none', 'view', 'prompt', 'all'],
+    })
+      .$type<'none' | 'view' | 'prompt' | 'all'>()
+      .default('view'),
+
+    // RBAC: OS-layer permissions (unix-user-modes.md)
+    unix_group: text('unix_group'), // e.g., 'agor_wt_abc123'
+    others_fs_access: text('others_fs_access', {
+      enum: ['none', 'read', 'write'],
+    })
+      .$type<'none' | 'read' | 'write'>()
+      .default('read'),
+
     // JSON blob for everything else
     data: t
       .json<unknown>('data')
@@ -486,6 +507,28 @@ export const worktrees = sqliteTable(
 );
 
 /**
+ * Worktree Owners - RBAC junction table
+ *
+ * Many-to-many relationship between users and worktrees.
+ * Owners have implicit 'all' permission regardless of others_can setting.
+ */
+export const worktreeOwners = sqliteTable(
+  'worktree_owners',
+  {
+    worktree_id: text('worktree_id', { length: 36 })
+      .notNull()
+      .references(() => worktrees.worktree_id, { onDelete: 'cascade' }),
+    user_id: text('user_id', { length: 36 })
+      .notNull()
+      .references(() => users.user_id, { onDelete: 'cascade' }),
+    created_at: t.timestamp('created_at').default(sql`(datetime('now'))`),
+  },
+  (table) => ({
+    pk: index('worktree_owners_pk').on(table.worktree_id, table.user_id),
+  })
+);
+
+/**
  * Users table - Authentication and authorization
  *
  * Optional table - only created when authentication is enabled via `agor auth init`.
@@ -507,7 +550,7 @@ export const users = sqliteTable(
     name: text('name'),
     emoji: text('emoji'),
     role: text('role', {
-      enum: ['owner', 'admin', 'member', 'viewer'],
+      enum: ['owner', 'admin', 'member', 'viewer'], // owner rarely used, hidden from UI
     })
       .notNull()
       .default('member'),
