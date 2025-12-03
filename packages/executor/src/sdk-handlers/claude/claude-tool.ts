@@ -904,17 +904,26 @@ export class ClaudeTool implements ITool {
    * Compute cumulative context window usage for a Claude Code session
    *
    * Algorithm:
-   * 1. Check if CURRENT task has compaction (if so, return only current task tokens)
-   * 2. Include current task tokens (if provided via currentRawSdkResponse)
-   * 3. Loop through previous tasks from DB (most recent to oldest)
-   * 4. Stop when we encounter a compaction event (context was reset)
-   * 5. Sum tokens across ALL models for each task
+   * 1. Query messages to find compaction boundary events
+   * 2. Build set of task IDs that had compaction events
+   * 3. Query previous completed tasks (ordered by created_at ASC for proper iteration)
+   * 4. Find the most recent compaction task
+   * 5. Sum tokens only from tasks AFTER the last compaction
+   * 6. Add BASELINE context on FIRST message after session start or compaction:
+   *    - Fresh session: cache_read + cache_creation (~23-27K for system prompt + tools)
+   *    - Post-compaction: cache_creation only (the compacted conversation summary)
+   * 7. Add current task tokens (and baseline if this IS the first task)
    *
-   * Note: The current task is not yet in the DB when this is called, so we receive
-   * its raw response separately via currentRawSdkResponse parameter.
+   * Why baseline matters:
+   * - cache_read_tokens: System prompt, tool definitions (~20K tokens)
+   * - cache_creation_tokens: CLAUDE.md, MCP server tools (~3-7K tokens)
+   * - These are part of the context window but not reported in input/output tokens
+   *
+   * Note: This is called BEFORE the task UPDATE, so querying the DB is safe.
+   * The current task is not yet in the DB, so we receive its raw response separately.
    *
    * @param sessionId - Session ID to compute context for
-   * @param currentTaskId - Current task ID (used to check if it has compaction)
+   * @param currentTaskId - Current task ID (excluded from DB query)
    * @param currentRawSdkResponse - Raw SDK response for the current task (not yet in DB)
    * @returns Promise resolving to computed context window usage in tokens
    */
@@ -923,33 +932,179 @@ export class ClaudeTool implements ITool {
     currentTaskId?: string,
     currentRawSdkResponse?: unknown
   ): Promise<number> {
-    // IMPORTANT: When currentRawSdkResponse is provided (during task completion),
-    // we MUST NOT query the database because this is called during task UPDATE
-    // operations. Querying the database during a pending UPDATE causes deadlocks
-    // in PostgreSQL due to read-while-write in the same transaction.
-    //
-    // For Claude Code, we need to sum previous tasks + current task, but we can't
-    // safely query previous tasks during the UPDATE. The solution is to compute
-    // incrementally: store cumulative tokens in each task, then just use the
-    // current task's tokens.
-    //
-    // TODO: In the future, we should store cumulative tokens in raw_sdk_response
-    // or compute them before the UPDATE begins.
+    // Start with current task tokens
+    let currentTaskTokens = 0;
     if (currentRawSdkResponse) {
-      const currentTaskTokens = this.computeContextTokensFromRawResponse(currentRawSdkResponse);
-      console.log(
-        `✅ Computed context window for Claude Code session ${sessionId}: ${currentTaskTokens} tokens (from current task only - safe mode)`
+      currentTaskTokens = this.computeContextTokensFromRawResponse(currentRawSdkResponse);
+    }
+
+    // Query previous completed tasks to sum their tokens
+    // This is safe because we're called BEFORE the UPDATE (not during)
+    if (!this.tasksService) {
+      console.warn(
+        `⚠️  computeContextWindow: tasksService not available, returning current task tokens only`
       );
       return currentTaskTokens;
     }
 
-    // IMPORTANT: Do NOT query database when currentRawSdkResponse is not provided
-    // This prevents deadlocks in PostgreSQL when called during task UPDATE operations.
-    // The caller should ALWAYS provide currentRawSdkResponse during task completion.
-    console.warn(
-      `⚠️  computeContextWindow called without currentRawSdkResponse for session ${sessionId}. ` +
-        'This should not happen during task completion. Returning 0 to avoid database deadlock.'
-    );
-    return 0;
+    try {
+      // Step 1: Find compaction events from messages
+      const compactionTaskIds = await this.findCompactionTaskIds(sessionId as SessionID);
+
+      // Step 2: Query previous completed tasks (chronological order for proper iteration)
+      // biome-ignore lint/suspicious/noExplicitAny: FeathersJS service find returns paginated or array
+      const result = await (this.tasksService as any).find({
+        query: {
+          session_id: sessionId,
+          status: 'completed', // Only completed tasks have token data
+          $sort: { created_at: 1 }, // Chronological order (oldest first)
+          $limit: 100, // Reasonable limit for context window computation
+        },
+      });
+
+      // biome-ignore lint/suspicious/noExplicitAny: FeathersJS service returns dynamic task data
+      const tasks: any[] = Array.isArray(result) ? result : result.data || [];
+
+      // Step 3: Find the most recent compaction event index
+      let lastCompactionIndex = -1;
+      for (let i = tasks.length - 1; i >= 0; i--) {
+        if (compactionTaskIds.has(tasks[i].task_id)) {
+          lastCompactionIndex = i;
+          break;
+        }
+      }
+
+      // Step 4: Sum tokens starting from after the last compaction
+      const startIndex = lastCompactionIndex >= 0 ? lastCompactionIndex + 1 : 0;
+      let totalTokens = 0;
+      let tasksCounted = 0;
+      let baselineTokensAdded = 0;
+
+      for (let i = startIndex; i < tasks.length; i++) {
+        const task = tasks[i];
+        // Skip current task (it's not in DB yet anyway, but just in case)
+        if (task.task_id === currentTaskId) continue;
+
+        // Get tokens from normalized_sdk_response
+        const normalized = task.normalized_sdk_response;
+        if (normalized?.tokenUsage) {
+          const taskTokens =
+            (normalized.tokenUsage.inputTokens || 0) + (normalized.tokenUsage.outputTokens || 0);
+          totalTokens += taskTokens;
+          tasksCounted++;
+
+          // CRITICAL: Add baseline context on FIRST message after start/compaction
+          // This accounts for system prompt, CLAUDE.md, MCP tools, etc.
+          if (i === startIndex) {
+            if (lastCompactionIndex === -1) {
+              // Fresh session: cache_read (~20K system prompt) + cache_creation (CLAUDE.md + MCP tools ~3-7K)
+              // Total baseline: ~23K-27K tokens for a fresh session
+              const cacheRead = normalized.tokenUsage.cacheReadInputTokens || 0;
+              const cacheCreation = normalized.tokenUsage.cacheCreationInputTokens || 0;
+              baselineTokensAdded = cacheRead + cacheCreation;
+              totalTokens += baselineTokensAdded;
+            } else {
+              // Post-compaction: cache_creation only (the compacted conversation summary)
+              // Note: We exclude cache_read here because it can exceed 200K context limits
+              // post-compaction (observed: 248K-1.9M tokens), likely due to cumulative caching
+              const cacheCreation = normalized.tokenUsage.cacheCreationInputTokens || 0;
+              baselineTokensAdded = cacheCreation;
+              totalTokens += baselineTokensAdded;
+            }
+          }
+        }
+      }
+
+      // Add current task tokens
+      totalTokens += currentTaskTokens;
+
+      // CRITICAL: Handle the case where THIS is the first task (no previous tasks)
+      // In this case, we need to add baseline context from the current task's raw response
+      if (tasksCounted === 0 && currentRawSdkResponse && lastCompactionIndex === -1) {
+        const response =
+          currentRawSdkResponse as import('../../types/sdk-response').ClaudeCodeSdkResponseTyped;
+        // Extract cache tokens from the first model in modelUsage
+        if (response.modelUsage && typeof response.modelUsage === 'object') {
+          const firstModelUsage = Object.values(response.modelUsage)[0];
+          if (firstModelUsage) {
+            // Fresh session: add cache_read + cache_creation as baseline
+            const cacheRead = firstModelUsage.cacheReadInputTokens || 0;
+            const cacheCreation = firstModelUsage.cacheCreationInputTokens || 0;
+            baselineTokensAdded = cacheRead + cacheCreation;
+            totalTokens += baselineTokensAdded;
+          }
+        }
+      }
+
+      const compactionInfo =
+        lastCompactionIndex >= 0
+          ? ` (reset after compaction at task index ${lastCompactionIndex})`
+          : ' (no compaction detected)';
+
+      const baselineInfo = baselineTokensAdded > 0 ? `, baseline: ${baselineTokensAdded}` : '';
+
+      console.log(
+        `✅ Computed cumulative context window for session ${sessionId}: ${totalTokens} tokens (${tasksCounted} previous tasks + current${baselineInfo})${compactionInfo}`
+      );
+
+      return totalTokens;
+    } catch (error) {
+      console.error(`❌ Failed to compute context window:`, error);
+      // Fall back to just current task tokens
+      return currentTaskTokens;
+    }
+  }
+
+  /**
+   * Find task IDs that have compaction events in their messages
+   *
+   * Compaction events are system messages with:
+   * - type === 'system' AND content is object with status === 'compacting'
+   * - OR content is array with a block having type === 'system_status' and status === 'compacting'
+   */
+  private async findCompactionTaskIds(sessionId: SessionID): Promise<Set<string>> {
+    const compactionTaskIds = new Set<string>();
+
+    if (!this.messagesRepo) {
+      console.warn(
+        `⚠️  findCompactionTaskIds: messagesRepo not available, skipping compaction detection`
+      );
+      return compactionTaskIds;
+    }
+
+    try {
+      const messages = await this.messagesRepo.findBySessionId(sessionId);
+
+      for (const msg of messages) {
+        if (msg.role !== MessageRole.SYSTEM) continue;
+        if (!msg.content || typeof msg.content !== 'object') continue;
+
+        const content = msg.content as { type?: string; status?: string } | unknown[];
+
+        // Check if content is array with compaction block
+        if (Array.isArray(content)) {
+          const hasCompaction = (content as Array<{ type?: string; status?: string }>).some(
+            (block) => block.type === 'system_status' && block.status === 'compacting'
+          );
+          if (hasCompaction && msg.task_id) {
+            compactionTaskIds.add(msg.task_id);
+          }
+        }
+        // Check if content is object with compacting status
+        else if (content.status === 'compacting' && msg.task_id) {
+          compactionTaskIds.add(msg.task_id);
+        }
+      }
+
+      if (compactionTaskIds.size > 0) {
+        console.log(
+          `🔄 Found ${compactionTaskIds.size} compaction event(s) in session ${sessionId}`
+        );
+      }
+    } catch (error) {
+      console.error(`❌ Failed to find compaction events:`, error);
+    }
+
+    return compactionTaskIds;
   }
 }

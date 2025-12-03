@@ -10,6 +10,7 @@ import { getGitState } from '@agor/core/git';
 import type { MessageID, PermissionMode, SessionID, Task, TaskID } from '@agor/core/types';
 import { createFeathersBackedRepositories } from '../../db/feathers-repositories.js';
 import type { StreamingCallbacks } from '../../sdk-handlers/base/types.js';
+import { normalizeRawSdkResponse } from '../../sdk-handlers/normalizer-factory.js';
 import type { AgorClient } from '../../services/feathers-client.js';
 
 /**
@@ -32,6 +33,8 @@ export interface BaseTool {
       cache_creation_tokens?: number;
     };
     wasStopped?: boolean;
+    /** Raw SDK response for token accounting - stored and normalized */
+    rawSdkResponse?: unknown;
   }>;
 
   // Optional stopTask method for tools that support interruption
@@ -43,6 +46,24 @@ export interface BaseTool {
     partialResult?: Partial<{ taskId: string; status: 'completed' | 'failed' | 'cancelled' }>;
     reason?: string;
   }>;
+
+  /**
+   * Compute cumulative context window usage for a session
+   *
+   * Each tool implements its own strategy:
+   * - Claude Code: Sum input+output tokens across tasks since last compaction
+   * - Codex/Gemini: May use SDK's cumulative reporting
+   *
+   * @param sessionId - Session ID to compute context for
+   * @param currentTaskId - Current task ID (optional)
+   * @param currentRawSdkResponse - Raw SDK response for current task (required during task completion)
+   * @returns Cumulative context window usage in tokens
+   */
+  computeContextWindow?(
+    sessionId: string,
+    currentTaskId?: string,
+    currentRawSdkResponse?: unknown
+  ): Promise<number>;
 }
 
 /**
@@ -332,7 +353,39 @@ export async function executeToolTask(params: {
       };
     }
 
-    // Update task status to completed/stopped with git SHA
+    // Add SDK response data for token accounting
+    // Store both raw (for debugging) and normalized (for UI/analytics)
+    if (result.rawSdkResponse) {
+      patchData.raw_sdk_response = result.rawSdkResponse;
+      // Normalize using tool-specific normalizer (toolName maps to agentic tool type)
+      const normalized = normalizeRawSdkResponse(toolName, result.rawSdkResponse);
+      if (normalized) {
+        patchData.normalized_sdk_response = normalized;
+        console.log(
+          `[${toolName}] Normalized SDK response: ${normalized.tokenUsage.totalTokens} tokens, $${normalized.costUsd?.toFixed(4) ?? 'N/A'}`
+        );
+      }
+
+      // Compute cumulative context window usage (BEFORE the patch to avoid DB deadlocks)
+      if (tool.computeContextWindow) {
+        try {
+          const contextWindow = await tool.computeContextWindow(
+            sessionId,
+            taskId,
+            result.rawSdkResponse
+          );
+          if (contextWindow > 0) {
+            patchData.computed_context_window = contextWindow;
+            console.log(`[${toolName}] Computed context window: ${contextWindow} tokens`);
+          }
+        } catch (error) {
+          console.error(`[${toolName}] Failed to compute context window:`, error);
+          // Continue without context window - not critical
+        }
+      }
+    }
+
+    // Update task status to completed/stopped with git SHA and SDK responses
     await client.service('tasks').patch(taskId, patchData);
 
     // Send completion signal if task was stopped
