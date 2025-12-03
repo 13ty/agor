@@ -14,7 +14,7 @@ import type {
   Task,
 } from '@agor/core/types';
 import { sql } from 'drizzle-orm';
-import { index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { index, integer, primaryKey, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
 // SQLite-specific type helpers (inline to avoid factory pattern type issues)
 const t = {
@@ -521,10 +521,11 @@ export const worktreeOwners = sqliteTable(
     user_id: text('user_id', { length: 36 })
       .notNull()
       .references(() => users.user_id, { onDelete: 'cascade' }),
-    created_at: t.timestamp('created_at').default(sql`(datetime('now'))`),
+    created_at: t.timestamp('created_at'),
   },
   (table) => ({
-    pk: index('worktree_owners_pk').on(table.worktree_id, table.user_id),
+    // Composite primary key matching migration 0016
+    pk: primaryKey({ columns: [table.worktree_id, table.user_id] }),
   })
 );
 
