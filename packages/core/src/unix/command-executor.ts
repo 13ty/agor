@@ -264,9 +264,11 @@ export class SudoCliExecutor implements CommandExecutor {
 
   /**
    * Build the full command with sudo and CLI prefix
+   *
+   * CRITICAL: Uses -n flag to prevent password prompts that freeze the system
    */
   private buildCommand(adminCommand: string, args: string[] = []): string {
-    const sudo = this.useSudo ? 'sudo' : '';
+    const sudo = this.useSudo ? 'sudo -n' : '';
     const argsStr = args.length > 0 ? ` ${args.join(' ')}` : '';
     return `${sudo} ${this.cliPath} admin ${adminCommand}${argsStr}`.trim();
   }
