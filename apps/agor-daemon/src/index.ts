@@ -3200,17 +3200,39 @@ async function main() {
         }
 
         // Find the currently running task(s)
-        const runningTasks = await tasksService.find({
-          query: {
-            session_id: id,
-            status: { $in: [TaskStatus.RUNNING, TaskStatus.AWAITING_PERMISSION] },
-            $limit: 10,
-          },
-        });
+        // Note: Using two separate queries to avoid $in operator which fails schema validation
+        let runningTasksArray: Task[] = [];
+        try {
+          // Query for RUNNING tasks
+          const runningResult = await tasksService.find({
+            query: {
+              session_id: id,
+              status: TaskStatus.RUNNING,
+              $limit: 10,
+            },
+          });
+          const runningFindResult = runningResult as Task[] | Paginated<Task>;
+          const runningTasks = isPaginated(runningFindResult)
+            ? runningFindResult.data
+            : runningFindResult;
 
-        // Extract data array if paginated
-        const findResult = runningTasks as Task[] | Paginated<Task>;
-        const runningTasksArray = isPaginated(findResult) ? findResult.data : findResult;
+          // Query for AWAITING_PERMISSION tasks
+          const awaitingResult = await tasksService.find({
+            query: {
+              session_id: id,
+              status: TaskStatus.AWAITING_PERMISSION,
+              $limit: 10,
+            },
+          });
+          const awaitingFindResult = awaitingResult as Task[] | Paginated<Task>;
+          const awaitingTasks = isPaginated(awaitingFindResult)
+            ? awaitingFindResult.data
+            : awaitingFindResult;
+
+          runningTasksArray = [...runningTasks, ...awaitingTasks];
+        } catch (findError) {
+          throw findError;
+        }
 
         if (runningTasksArray.length === 0) {
           return {
@@ -3237,12 +3259,7 @@ async function main() {
             },
             params
           );
-
-          console.log(
-            `🛑 [Daemon] Stop requested for session ${id.substring(0, 8)}, task ${latestTask.task_id.substring(0, 8)} set to STOPPING`
-          );
         } catch (error) {
-          console.error(`❌ [Daemon] Failed to set STOPPING status:`, error);
           return {
             success: false,
             reason: `Failed to update status: ${error instanceof Error ? error.message : 'Unknown error'}`,
@@ -3261,8 +3278,6 @@ async function main() {
 
         // PHASE 3: Handle failed stop (revert to RUNNING)
         if (!result.success) {
-          // Stop failed, revert to RUNNING
-          console.warn(`⚠️  [Daemon] Stop failed, reverting to RUNNING`);
           try {
             await tasksService.patch(latestTask.task_id, {
               status: TaskStatus.RUNNING,
