@@ -5,8 +5,19 @@
  * 1. Send stop signal with sequence number (retry up to 3 times)
  * 2. Wait for ACK from executor (confirms receipt)
  * 3. Wait for completion signal (confirms stopped)
- * 4. Update task+session atomically only after confirmation
+ * 4. Update session to IDLE with ready_for_prompt=false
  * 5. Safety nets for timeouts and hung executors
+ *
+ * OWNERSHIP OF STATE TRANSITIONS:
+ * - Task status STOPPING → STOPPED: Set by executor (via tasks.patch)
+ * - Session status STOPPING → IDLE: Set by both tasks.ts hook AND this handler
+ * - ready_for_prompt flag: ONLY set by this handler for STOPPED tasks
+ *   (tasks.ts explicitly skips ready_for_prompt for STOPPED status to avoid race)
+ *
+ * RACE CONDITION PREVENTION:
+ * - Executor checks BOTH session_id AND task_id before responding to stop signal
+ * - tasks.ts does NOT set ready_for_prompt for STOPPED tasks (avoids racing with this handler)
+ * - This handler validates task is still in STOPPING state before proceeding
  */
 
 import type { Application } from '@agor/core/feathers';
@@ -56,6 +67,25 @@ export async function handleStopWithAck(
   params: RouteParams
 ): Promise<{ success: boolean; reason?: string }> {
   console.log(`🛑 [Stop Handler] Starting stop for task ${taskId.substring(0, 8)}`);
+
+  // DEFENSIVE: Verify task is still in STOPPING state before proceeding
+  // This guards against race conditions where the task completed naturally
+  // between when stop was requested and when this handler runs
+  try {
+    const currentTask = await app.service('tasks').get(taskId);
+    if (currentTask.status !== TaskStatus.STOPPING) {
+      console.log(
+        `⏭️ [Stop Handler] Task ${taskId.substring(0, 8)} already in terminal state (${currentTask.status}), skipping stop`
+      );
+      return {
+        success: true,
+        reason: `Task already ${currentTask.status}`,
+      };
+    }
+  } catch (error) {
+    console.error(`❌ [Stop Handler] Failed to verify task state:`, error);
+    // Continue anyway - better to attempt stop than to bail
+  }
 
   let sequence = 0;
   let ackReceived = false;
@@ -111,7 +141,26 @@ export async function handleStopWithAck(
     console.error(`❌ [Stop Handler] Failed to receive ACK after ${MAX_RETRIES} attempts`);
 
     // Safety net: Force update task and session to stopped/idle
+    // BUT FIRST: Check if session is still in STOPPING state.
+    // If a new task started while we were waiting for ACK, session will be RUNNING
+    // and we should NOT force it to IDLE (that would break the new task).
     try {
+      const currentSession = await app.service('sessions').get(sessionId);
+      if (currentSession.status !== SessionStatus.STOPPING) {
+        console.warn(
+          `⚠️  [Stop Handler] Session ${sessionId.substring(0, 8)} is no longer STOPPING (now ${currentSession.status}), skipping force-stop`
+        );
+        // Still update the task to STOPPED (it's the old task that never ACKed)
+        await app.service('tasks').patch(taskId, {
+          status: TaskStatus.STOPPED,
+          completed_at: new Date().toISOString(),
+        });
+        return {
+          success: true,
+          reason: 'Task force-stopped but session already moved on to new task',
+        };
+      }
+
       await app.service('tasks').patch(taskId, {
         status: TaskStatus.STOPPED,
         completed_at: new Date().toISOString(),
@@ -144,7 +193,8 @@ export async function handleStopWithAck(
     }, STOP_COMPLETE_TIMEOUT_MS);
 
     const completeHandler = (data: StopCompleteData) => {
-      if (data.task_id === taskId) {
+      // DEFENSIVE: Validate both task_id AND session_id to prevent cross-session confusion
+      if (data.task_id === taskId && data.session_id === sessionId) {
         clearTimeout(timeout);
         app.service('sessions').removeListener('task_stopped_complete', completeHandler);
         console.log(`✅ [Stop Handler] Received completion signal`);
@@ -163,7 +213,25 @@ export async function handleStopWithAck(
     );
 
     // Safety net: Force update even though we got ACK
+    // BUT FIRST: Check if session is still in STOPPING state.
+    // If a new task started while we were waiting, session will be RUNNING.
     try {
+      const currentSession = await app.service('sessions').get(sessionId);
+      if (currentSession.status !== SessionStatus.STOPPING) {
+        console.warn(
+          `⚠️  [Stop Handler] Session ${sessionId.substring(0, 8)} is no longer STOPPING (now ${currentSession.status}), skipping force-stop`
+        );
+        // Still update the task to STOPPED
+        await app.service('tasks').patch(taskId, {
+          status: TaskStatus.STOPPED,
+          completed_at: new Date().toISOString(),
+        });
+        return {
+          success: true,
+          reason: 'Task force-stopped but session already moved on to new task',
+        };
+      }
+
       await app.service('tasks').patch(taskId, {
         status: TaskStatus.STOPPED,
         completed_at: new Date().toISOString(),
